@@ -241,28 +241,55 @@ def main():
     
     if len(sys.argv) > 1:
         simfile = sys.argv[1]
-    
+
+    use_local = True
     try:
         simlines = open(simfile,"r").readlines()
     except:
-        print("ERROR: " + simfile + " could not be read!")
-        print("Press Enter to close the program.")
-        input()
-        sys.exit(1)
-    
-    linenum = 0
-    for line in simlines:
-        linenum += 1
+        print(simfile + " could not be read!")
+        print("Using Am I Muted's online spreadsheet instead.")
+        use_local = False
+
+
+    if use_local:
+        linenum = 0
+        for line in simlines:
+            linenum += 1
+            try:
+                grabdata(line.split()[-1])
+            except:
+                print("ERROR on line " + str(linenum) + ":")
+                print(line.strip())
+                print("Either this line was malformed or the sim has expired.")
+                print("Press Enter to close the program, or enter 'skip' to skip.")
+                if "skip" in input().lower():
+                    continue
+                sys.exit(1)
+    else:
+        spreadsheeturl = "https://docs.google.com/spreadsheets/d/1Naqk3fXF0z316UQJ5SVVhaZV8CdS1LZoZTVjwJ_RLho/export?format=csv"
         try:
-            grabdata(line.split()[-1])
+            spreadsheetdata = requests.get(spreadsheeturl).text.split("\n")
         except:
-            print("ERROR on line " + str(linenum) + ":")
-            print(line.strip())
-            print("Either this line was malformed or the sim has expired.")
-            print("Press Enter to close the program, or enter 'skip' to skip.")
-            if "skip" in input().lower():
-                continue
+            print("Could not access URL:")
+            print(spreadsheeturl)
+            print("Press Enter to close the program.")
             sys.exit(1)
+        #Check all the cells in the spreadsheet.  If any of them are raidbots links, run grabdata on them.
+        print(spreadsheetdata)
+        for line in spreadsheetdata:
+            cells = line.split(",")
+            #All entries from this download have quotes surrounding them.
+            for cell in cells:
+                if "www.raidbots.com" in cell:
+                    try:
+                        print(cell)
+                        grabdata(cell)
+                    except:
+                        print("ERROR with link: " + cell)
+                        print("Either this link was malformed or the sim has expired.")
+
+        
+        
             
     outfilename = "droptimizers-" + \
                   datetime.datetime.fromtimestamp( \
