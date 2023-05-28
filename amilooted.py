@@ -285,7 +285,23 @@ def grabpastebin(url):
             ilvl = line
         else:
             itemname = line
-    
+
+
+
+def graburl(url):
+    try:
+        if "raidbots.com" in url:
+            print("Checking " + url)
+            grabraidbots(url)
+        if "pastebin.com" in url:
+            print("Checking " + url)
+            grabpastebin(url)
+    except:
+        print("ERROR with URL:")
+        print(url)
+        print("Either this was malformed or the sim/paste has expired.")
+
+
 def main():
     #Ugly hack for stupid operating systems:
     #Calling this by double-click on Windows makes us live in a weird directory
@@ -310,30 +326,8 @@ def main():
         linenum = 0
         for line in simlines:
             linenum += 1
-            if "raidbots.com" in line:
-                try:
-                    print("Checking " + line.split()[-1])
-                    grabraidbots(line.split()[-1])
-                except:
-                    print("ERROR on line " + str(linenum) + ":")
-                    print(line.strip())
-                    print("Either this line was malformed or the sim has expired.")
-                    print("Press Enter to close the program, or enter 'skip' to skip.")
-                    if "skip" in input().lower():
-                        continue
-                    sys.exit(1)
-            if "pastebin.com" in line:
-                try:
-                    print("Checking " + line.split()[-1])
-                    grabpastebin(line.split()[-1])
-                except:
-                    print("ERROR on line " + str(linenum) + ":")
-                    print(line.strip())
-                    print("Either this line was malformed or the sim has expired.")
-                    print("Press Enter to close the program, or enter 'skip' to skip.")
-                    if "skip" in input().lower():
-                        continue
-                    sys.exit(1)
+            graburl(line.split()[-1])
+
     else:
         spreadsheeturl = "https://docs.google.com/spreadsheets/d/1Naqk3fXF0z316UQJ5SVVhaZV8CdS1LZoZTVjwJ_RLho/export?format=csv"
         try:
@@ -344,25 +338,11 @@ def main():
             print("Press Enter to close the program.")
             sys.exit(1)
         #Check all the cells in the spreadsheet.  If any of them are raidbots links, run grabraidbots on them.
-        print(spreadsheetdata)
         for line in spreadsheetdata:
             cells = line.split(",")
             #All entries from this download have quotes surrounding them.
             for cell in cells:
-                if "raidbots.com" in cell:
-                    try:
-                        print("Checking " + cell)
-                        grabraidbots(cell)
-                    except:
-                        print("ERROR with link: " + cell)
-                        print("Either this link was malformed or the sim has expired.")
-                if "pastebin.com" in cell:
-                    try:
-                        print("Checking " + cell)
-                        grabpastebin(cell)
-                    except:
-                        print("ERROR with link: " + cell)
-                        print("Either this link was malformed or the pastebin has expired.")
+                graburl(cell)
 
         
         
