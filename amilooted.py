@@ -274,6 +274,31 @@ def grabpastebin(url):
             continue
         if line == "QE Live":
             continue
+            
+        #Pasting from Firefox puts everything on its own line; things look like
+        #    Standard Edition
+        #    Find your next upgrade! - Raid
+        #    Mythic - 2 Upgrades
+        #    img
+        #    447
+        #    Screaming Black Dragonscale
+        #    +3.23%
+        #    img
+        #    441
+        #    Etchings of the Captive Revenant
+        #    +0.07%
+        #    img
+        #Pasting from Chrome, Opera, or Edge merges ilvl with "img".
+        #    Standard Edition
+        #    Find your next upgrade! - Raid
+        #    Mythic - 2 Upgrades
+        #    img447
+        #    Screaming Black Dragonscale
+        #    +3.23%
+        #    img441
+        #    Etchings of the Captive Revenant
+        #    +0.07%
+        #    img441
         #Every line that makes it through this filter should be an item name,
         #or an ilvl, or a percentage.  Ilvls will be three digits, percentages
         #will have a %.
@@ -285,6 +310,8 @@ def grabpastebin(url):
             players[pindex].sims.update({itemname + " " + ilvl:"0"})
         elif len(line) == 3:
             ilvl = line
+        elif "img" in line:
+            ilvl = line[3:]
         else:
             itemname = line
 
