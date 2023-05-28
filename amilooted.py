@@ -87,6 +87,72 @@ def tierfilter(itemname, key):
         return "Tier " + piece + " " + ilvl
     return itemname
 
+
+#Try to replace tier names with, e.g., "Tier Helm 441", without knowing
+#the actual slot.  This might be less reliable than tierfilter, but I'd rather
+#not resort to hardcoding every piece name just yet.
+def tierfilter_qe(itemname):
+    if tiercheck(itemname):
+        if "helm" in itemname.lower() or \
+           "horns" in itemname.lower() or \
+           "hood" in itemname.lower() or \
+           "bough" in itemname.lower() or \
+           "crown" in itemname.lower() or \
+           "face" in itemname.lower() or \
+           "cowl" in itemname.lower() or \
+           "cover" in itemname.lower() or \
+           "mask" in itemname.lower() or \
+           "visage" in itemname.lower():
+            return "Tier Helmet"
+        if "pauld" in itemname.lower() or \
+           "shoulder" in itemname.lower() or \
+           "mantle" in itemname.lower() or \
+           "wings" in itemname.lower() or \
+           "trophy" in itemname.lower() or \
+           "aurora" in itemname.lower() or \
+           "spines" in itemname.lower() or \
+           "devotion" in itemname.lower() or \
+           "erpads" in itemname.lower() or \
+           "amice" in itemname.lower():
+            return "Tier Pauldrons"
+        if "vest" in itemname.lower() or \
+           "plackart" in itemname.lower() or \
+           "chest" in itemname.lower() or \
+           "hauberk" in itemname.lower() or \
+           "cuirass" in itemname.lower() or \
+           "brigandine" in itemname.lower() or \
+           "command" in itemname.lower() or \
+           "adornments" in itemname.lower() or \
+           "robes" in itemname.lower():
+            return "Tier Chest"
+        if "grips" in itemname.lower() or \
+           "gauntlet" in itemname.lower() or \
+           "hand" in itemname.lower() or \
+           "claws" in itemname.lower() or \
+           "skinners" in itemname.lower() or \
+           "gloves" in itemname.lower() or \
+           "fists" in itemname.lower() or \
+           "protectors" in itemname.lower() or \
+           "grasp" in itemname.lower() or \
+           "knuckles" in itemname.lower():
+            return "Tier Gloves"
+        #Check "legg" instead of "leg" because "legendary" might be part of an
+        #item name at some point, but this will catch "leggings" and "legguards"
+        if "legg" in itemname.lower() or \
+           "legpl" in itemname.lower() or \
+           "schynbalds" in itemname.lower() or \
+           "pant" in itemname.lower() or \
+           "chausses" in itemname.lower() or \
+           "poleyns" in itemname.lower() or \
+           "trousers" in itemname.lower() or \
+           "faulds" in itemname.lower() or \
+           "breeches" in itemname.lower() or \
+           "tights" in itemname.lower() or \
+           "braies" in itemname.lower():
+            return "Tier Pants"
+        print("ERROR: Could not resolve " + itemname + " properly!  Left as-is.")
+    return itemname
+
 #List of all the item names being simmed in anyone's droptimizers.
 items = []
 def add_to_items(itemname):
@@ -329,7 +395,7 @@ def grabpastebin(url):
         elif "img" in line:
             ilvl = line[3:]
         else:
-            itemname = line
+            itemname = tierfilter_qe(line)
 
 
 
