@@ -130,6 +130,22 @@ def add_player(charname, spec):
         players.append(Player(charname, spec, multispec))
    
     return pindex
+    
+#Key function used to sort the player list by role.
+def rolekey(p):
+    if p.spec == "Protection" or \
+       p.spec == "Blood" or \
+       p.spec == "Guardian" or \
+       p.spec == "Brewmaster" or \
+       p.spec == "Vengenace":
+        return 0
+    if p.spec == "Holy" or \
+       p.spec == "Restoration" or \
+       p.spec == "Discipline" or \
+       p.spec == "Mistweaver" or \
+       p.spec == "Preservation":
+        return 2
+    return 1
 
 
 def grabraidbots(url):
@@ -374,7 +390,11 @@ def main():
                 graburl(cell)
 
         
-        
+    #Sort players alphabetically, and by role.  Tanks first, then DPS, then
+    #healers.
+    #Sort alphabetically first so that the role sorting actually works.
+    players.sort(key=lambda p: p.name)
+    players.sort(key=rolekey)
             
     outfilename = "droptimizers-" + \
                   datetime.datetime.fromtimestamp( \
