@@ -108,7 +108,31 @@ class Player:
         self.multispec = multispec
 
 
-def grabdata(url):
+
+#Check to see if there's already a player by that name.  If not, we'll add
+#a new player object to the players list.  If yes, add this droptimizer data
+#to the existing player.
+#If someone submitted sims for multiple specs, treat the specs as different
+#players with the same name.
+def add_player(charname, spec):
+    pindex = -1
+    multispec = False
+    for i in range(len(players)):
+        if charname == players[i].name:
+            if spec == players[i].spec:
+                pindex = i
+                break
+            else:
+                players[i].multispec = True
+                multispec = True
+    
+    if pindex == -1:
+        players.append(Player(charname, spec, multispec))
+   
+    return pindex
+
+
+def grabraidbots(url):
     #Add a trailing / if we didn't already have one
     if not url[-1] == "/":
         url = url + "/"
@@ -140,24 +164,8 @@ def grabdata(url):
         jsondata = json.loads(requests.get(url+"data.json").text)
         spec = jsondata["sim"]["players"][0]["specialization"].split()[0]
     
-    #Check to see if there's already a player by that name.  If not, we'll add
-    #a new player object to the players list.  If yes, add this droptimizer data
-    #to the existing player.
-    #If someone submitted sims for multiple specs, treat the specs as different
-    #players with the same name.
-    pindex = -1
-    multispec = False
-    for i in range(len(players)):
-        if charname == players[i].name:
-            if spec == players[i].spec:
-                pindex = i
-                break
-            else:
-                players[i].multispec = True
-                multispec = True
-    
-    if pindex == -1:
-        players.append(Player(charname, spec, multispec))
+
+    pindex = add_player(charname, spec)
     
     #Extract the names of the items simmed, as well as their profileset names
     #Item name example: Harlan's Loaded Dice 441
@@ -230,6 +238,53 @@ def grabdata(url):
         else:
             players[pindex].sims.update({item:percentupgrade})
     
+
+
+def grabpastebin(url):
+    #Check to see if "raw" is in the url; if so, use it as-is
+    #if not, generate the "raw" counterpart.
+    realurl = ""
+    if "raw" in url:
+        realurl = url
+    else:
+        realurl = "https://pastebin.com/raw/" + url.split("/")[-1].strip()
+    
+    data = requests.get(realurl).text.split("\n")
+    for i in range(len(data)):
+        data[i] = data[i].strip()
+    
+    charname = data[0]
+    spec = data[1].split()[0]
+    
+    pindex = add_player(charname, spec)
+    
+    #Fortunately, we don't have to do as much cursed stuff with figuring out
+    #item names as we did with raidbots.
+    itemname = ""
+    ilvl = ""
+    for line in data[3:]:
+        #Filter out the junk lines.
+        if "Upgrades" in line:
+            continue
+        if line == "Standard Edition":
+            continue
+        if "Find your next upgrade!" in line:
+            continue
+        if line == "img":
+            continue
+        if line == "QE Live":
+            continue
+        #Every line that makes it through this filter should be an item name,
+        #or an ilvl, or a percentage.  Ilvls will be three digits, percentages
+        #will have a %.
+        if "%" in line:
+            players[pindex].sims.update({itemname + " " + ilvl:line[1:-1]})
+        elif line == "+0":
+            players[pindex].sims.update({itemname + " " + ilvl:"0"})
+        elif len(line) == 3:
+            ilvl = line
+        else:
+            itemname = line
     
 def main():
     #Ugly hack for stupid operating systems:
@@ -255,16 +310,30 @@ def main():
         linenum = 0
         for line in simlines:
             linenum += 1
-            try:
-                grabdata(line.split()[-1])
-            except:
-                print("ERROR on line " + str(linenum) + ":")
-                print(line.strip())
-                print("Either this line was malformed or the sim has expired.")
-                print("Press Enter to close the program, or enter 'skip' to skip.")
-                if "skip" in input().lower():
-                    continue
-                sys.exit(1)
+            if "raidbots.com" in line:
+                try:
+                    print("Checking " + line.split()[-1])
+                    grabraidbots(line.split()[-1])
+                except:
+                    print("ERROR on line " + str(linenum) + ":")
+                    print(line.strip())
+                    print("Either this line was malformed or the sim has expired.")
+                    print("Press Enter to close the program, or enter 'skip' to skip.")
+                    if "skip" in input().lower():
+                        continue
+                    sys.exit(1)
+            if "pastebin.com" in line:
+                try:
+                    print("Checking " + line.split()[-1])
+                    grabpastebin(line.split()[-1])
+                except:
+                    print("ERROR on line " + str(linenum) + ":")
+                    print(line.strip())
+                    print("Either this line was malformed or the sim has expired.")
+                    print("Press Enter to close the program, or enter 'skip' to skip.")
+                    if "skip" in input().lower():
+                        continue
+                    sys.exit(1)
     else:
         spreadsheeturl = "https://docs.google.com/spreadsheets/d/1Naqk3fXF0z316UQJ5SVVhaZV8CdS1LZoZTVjwJ_RLho/export?format=csv"
         try:
@@ -274,19 +343,26 @@ def main():
             print(spreadsheeturl)
             print("Press Enter to close the program.")
             sys.exit(1)
-        #Check all the cells in the spreadsheet.  If any of them are raidbots links, run grabdata on them.
+        #Check all the cells in the spreadsheet.  If any of them are raidbots links, run grabraidbots on them.
         print(spreadsheetdata)
         for line in spreadsheetdata:
             cells = line.split(",")
             #All entries from this download have quotes surrounding them.
             for cell in cells:
-                if "www.raidbots.com" in cell:
+                if "raidbots.com" in cell:
                     try:
-                        print(cell)
-                        grabdata(cell)
+                        print("Checking " + cell)
+                        grabraidbots(cell)
                     except:
                         print("ERROR with link: " + cell)
                         print("Either this link was malformed or the sim has expired.")
+                if "pastebin.com" in cell:
+                    try:
+                        print("Checking " + cell)
+                        grabpastebin(cell)
+                    except:
+                        print("ERROR with link: " + cell)
+                        print("Either this link was malformed or the pastebin has expired.")
 
         
         
