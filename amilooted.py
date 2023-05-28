@@ -407,7 +407,9 @@ def main():
                 output.write(",")
         output.write("\n")
 
-
+    print("Output written to " + outfilename + ".")
+    print("Press Enter to exit.")
+    input()
 
 
 
