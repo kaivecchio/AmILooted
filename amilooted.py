@@ -31,12 +31,19 @@
 # 444), but only two for the Elementium Pocket Anvil (becaue Heroic caps at 441,
 # and it drops at an unupgradeable 441 on Mythic).
 
-import requests
+import subprocess
 import os
 import sys
 import time
 import datetime
 import json
+try:
+    import requests
+except:
+    print("Requests library not installed!  Installing...")
+    subprocess.call([sys.executable, "-m", "pip", "install", "requests"])
+    print("Requests should be installed; this should only happen once.")
+    import requests
 
 #Substrings that reliably indicate that this is a tier piece.
 #This should be the only thing that needs to be updated for new patches,
