@@ -278,8 +278,10 @@ def grabpastebin(url):
         #or an ilvl, or a percentage.  Ilvls will be three digits, percentages
         #will have a %.
         if "%" in line:
+            add_to_items(itemname + " " + ilvl)
             players[pindex].sims.update({itemname + " " + ilvl:line[1:-1]})
         elif line == "+0":
+            add_to_items(itemname + " " + ilvl)
             players[pindex].sims.update({itemname + " " + ilvl:"0"})
         elif len(line) == 3:
             ilvl = line
