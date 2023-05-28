@@ -227,7 +227,7 @@ def grabraidbots(url):
         key = line.split(",")[0]
         item = gearnames[key]
         newdps = float(line.split(",")[1])
-        percentupgrade = int(1000 * (newdps - baselinedps)/baselinedps) * 0.1
+        percentupgrade = int(10000 * (newdps - baselinedps)/baselinedps) * 0.01
         if item in players[pindex].sims:
             #This means we already added the item to the player's sims at some
             #point, probably because this is a ring or trinket and we simmed it
