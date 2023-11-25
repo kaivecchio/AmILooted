@@ -48,19 +48,19 @@ except:
 #Substrings that reliably indicate that this is a tier piece.
 #This should be the only thing that needs to be updated for new patches,
 #unless raidbots changes something about their developer tools.
-tiernames = ["Lingering Phantom's",     #Death Knight
-             "Kinslayer's",             #Demon Hunter
-             "of the Autumn Blaze",     #Druid
-             "of Obsidian Secrets",     #Evoker
-             "Ashen Predator's",        #Hunter
-             "Underlight Conjurer's",   #Mage
-             "of the Vermillion Forge", #Monk
-             "Heartfire Sentinel's",    #Paladin
-             "of the Furnace Seraph",   #Priest
-             "Lurking Specter's",       #Rogue
-             "of the Cinderwolf",       #Shaman
-             "of the Sinister Savant",  #Warlock
-             "of the Onyx Crucible"]    #Warrior
+tiernames = ["of the Risen Nightmare",  #Death Knight
+             "Screaming Torchfiend's",  #Demon Hunter
+             "Benevolent Embersage's",  #Druid
+             "Weyrnkeeper's Timeless",  #Evoker
+             "Blazing Dreamstalker's",  #Hunter
+             "Wayward Chronomancer's",  #Mage
+             "Mystic Heron's",          #Monk
+             "Zealous Pyreknight's",    #Paladin
+             "of Lunar Communion",      #Priest
+             "Lucid Shadewalker's",     #Rogue
+             "Greatwolf Outcast's",     #Shaman
+             "Devout Ashdevil's",       #Warlock
+             "Molten Vanguard's"]       #Warrior
 
 #A dictionary that turns slot name into an appropriate gear name.
 #Used to build strings like "Tier Helmet".
@@ -109,6 +109,16 @@ def tierfilter_qe(itemname):
            "cowl" in itemname.lower() or \
            "cover" in itemname.lower() or \
            "mask" in itemname.lower() or \
+           "gaze" in itemname.lower() or \
+           "scowl" in itemname.lower() or \
+           "casque" in itemname.lower() or \
+           "coif" in itemname.lower() or \
+           "chronocap" in itemname.lower() or \
+           "hatsuburi" in itemname.lower() or \
+           "barbute" in itemname.lower() or \
+           "crest" in itemname.lower() or \
+           "jaws" in itemname.lower() or \
+           "domeplate" in itemname.lower() or \
            "visage" in itemname.lower():
             return "Tier Helmet"
         if "pauld" in itemname.lower() or \
@@ -120,6 +130,16 @@ def tierfilter_qe(itemname):
            "spines" in itemname.lower() or \
            "devotion" in itemname.lower() or \
            "erpads" in itemname.lower() or \
+           "skewers" in itemname.lower() or \
+           "horned memento" in itemname.lower() or \
+           "wisdom" in itemname.lower() or \
+           "sandbrace" in itemname.lower() or \
+           "finest hunt" in itemname.lower() or \
+           "metronomes" in itemname.lower() or \
+           "hopeful effigy" in itemname.lower() or \
+           "ailettes" in itemname.lower() or \
+           "companions" in itemname.lower() or \
+           "hatespikes" in itemname.lower() or \
            "amice" in itemname.lower():
             return "Tier Pauldrons"
         if "vest" in itemname.lower() or \
@@ -130,17 +150,30 @@ def tierfilter_qe(itemname):
            "brigandine" in itemname.lower() or \
            "command" in itemname.lower() or \
            "adornments" in itemname.lower() or \
-           "robes" in itemname.lower():
+           "casket" in itemname.lower() or \
+           "binding" in itemname.lower() or \
+           "raiment" in itemname.lower() or \
+           "patchwork" in itemname.lower() or \
+           "warplate" in itemname.lower() or \
+           "cassock" in itemname.lower() or \
+           "harness" in itemname.lower() or \
+           "razorhide" in itemname.lower() or \
+           "robe" in itemname.lower():
             return "Tier Chest"
         if "grips" in itemname.lower() or \
            "gauntlet" in itemname.lower() or \
            "hand" in itemname.lower() or \
            "claws" in itemname.lower() or \
            "skinners" in itemname.lower() or \
-           "gloves" in itemname.lower() or \
+           "glove" in itemname.lower() or \
            "fists" in itemname.lower() or \
            "protectors" in itemname.lower() or \
            "grasp" in itemname.lower() or \
+           "thorns" in itemname.lower() or \
+           "talons" in itemname.lower() or \
+           "clawguards" in itemname.lower() or \
+           "touch" in itemname.lower() or \
+           "crushers" in itemname.lower() or \
            "knuckles" in itemname.lower():
             return "Tier Gloves"
         #Check "legg" instead of "leg" because "legendary" might be part of an
@@ -155,6 +188,13 @@ def tierfilter_qe(itemname):
            "faulds" in itemname.lower() or \
            "breeches" in itemname.lower() or \
            "tights" in itemname.lower() or \
+           "blazewraps" in itemname.lower() or \
+           "greaves" in itemname.lower() or \
+           "waders" in itemname.lower() or \
+           "burdens" in itemname.lower() or \
+           "cuisses" in itemname.lower() or \
+           "kilt" in itemname.lower() or \
+           "tassets" in itemname.lower() or \
            "braies" in itemname.lower():
             return "Tier Pants"
         print("ERROR: Could not resolve " + itemname + " properly!  Left as-is.")
@@ -447,7 +487,8 @@ def main():
             graburl(line.split()[-1])
 
     else:
-        spreadsheeturl = "https://docs.google.com/spreadsheets/d/1Naqk3fXF0z316UQJ5SVVhaZV8CdS1LZoZTVjwJ_RLho/export?format=csv"
+        #spreadsheeturl = "https://docs.google.com/spreadsheets/d/1Naqk3fXF0z316UQJ5SVVhaZV8CdS1LZoZTVjwJ_RLho/export?format=csv"
+        spreadsheeturl = "https://docs.google.com/spreadsheets/d/1FbEag11PEMzENbpRhQdG3Gcj3P_21Qz9a7nZ1CuLZRo/gviz/tq?tqx=out:csv&sheet=Droptimizer"
         try:
             spreadsheetdata = requests.get(spreadsheeturl).text.split("\n")
         except:
@@ -460,7 +501,11 @@ def main():
             cells = line.split(",")
             #All entries from this download have quotes surrounding them.
             for cell in cells:
-                graburl(cell)
+                #Strip leading and trailing quotation marks, then tokenize (this
+                #might be necessary if there are notes next to some urls).
+                data = cell[1:-1].split()
+                for d in data:
+                    graburl(d)
 
         
     #Sort players alphabetically, and by role.  Tanks first, then DPS, then
