@@ -487,7 +487,6 @@ def main():
             graburl(line.split()[-1])
 
     else:
-        #spreadsheeturl = "https://docs.google.com/spreadsheets/d/1Naqk3fXF0z316UQJ5SVVhaZV8CdS1LZoZTVjwJ_RLho/export?format=csv"
         spreadsheeturl = "https://docs.google.com/spreadsheets/d/1FbEag11PEMzENbpRhQdG3Gcj3P_21Qz9a7nZ1CuLZRo/gviz/tq?tqx=out:csv&sheet=Droptimizer"
         try:
             spreadsheetdata = requests.get(spreadsheeturl).text.split("\n")
