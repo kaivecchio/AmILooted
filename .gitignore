@@ -49,3 +49,31 @@ Pipfile.lock
 
 # Ignore generated CSV files with "droptimizers-" prefix
 droptimizers-*.csv
+
+# ----------------------------------
+# Visual Studio Cache & Workspace Files
+# ----------------------------------
+CodeChunks.db
+CodeChunks.db-shm
+CodeChunks.db-wal
+SemanticSymbols.db
+SemanticSymbols.db-shm
+SemanticSymbols.db-wal
+slnx.sqlite
+VSWorkspaceState.json
+.vsidx
+*.vsidx
+.wsuo
+
+# ----------------------------------
+# Project Settings & Layout (User-Specific)
+# ----------------------------------
+ProjectSettings.json
+DocumentLayout.backup.json
+DocumentLayout.json
+
+# ----------------------------------
+# Test Logs
+# ----------------------------------
+*.testlog
+testlog.manifest
