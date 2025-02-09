@@ -1,0 +1,51 @@
+# ----------------------------------
+# Python-related ignores
+# ----------------------------------
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment directories
+venv/
+env/
+*.venv/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# ----------------------------------
+# IDE/editor files
+# ----------------------------------
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+*.swp
+*.bak
+
+# ----------------------------------
+# OS-generated files
+# ----------------------------------
+.DS_Store  # macOS Finder file
+Thumbs.db  # Windows thumbnail cache
+
+# ----------------------------------
+# Logs & Debugging
+# ----------------------------------
+logs/
+*.log
+*.out
+*.err
+debug.log
+
+# ----------------------------------
+# Dependency Management
+# ----------------------------------
+pip-log.txt
+pip-wheel-metadata/
+poetry.lock
+Pipfile.lock
+
+# Ignore generated CSV files with "droptimizers-" prefix
+droptimizers-*.csv
