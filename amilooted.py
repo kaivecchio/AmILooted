@@ -104,19 +104,24 @@ def add_to_items(itemname, itemSlot: str):
     items[itemname] = itemSlot.lower()
     
 #Dictionary of all the item names (key) being simmed in anyone's droptimizers and their source (value).
+NORMAL_RAID_SOURCE = "Normal Raid"
+HEROIC_RAID_SOURCE = "Heroic Raid"
+MYTHIC_RAID_SOURCE = "Mythic Raid"
+DUNGEON_SOURCE = "Mythic +10 Vault"
+
 itemSources = {}
 sourcesLookup = { 
-                 "raid-normal": "Normal Raid",
-                 "raid-heroic": "Heroic Raid",
-                 "raid-mythic": "Mythic Raid",
-                 "dungeon-mythic-weekly10": "Mythic +10 Vault"
+                 "raid-normal": NORMAL_RAID_SOURCE,
+                 "raid-heroic": HEROIC_RAID_SOURCE,
+                 "raid-mythic": MYTHIC_RAID_SOURCE,
+                 "dungeon-mythic-weekly10": DUNGEON_SOURCE
 }
 
 qeSourcesLookup = {
-    "Raid 3": "Normal Raid",
-    "Raid 5": "Heroic Raid",
-    "Raid 7": "Mythic Raid",
-    "Dungeon 10": "Mythic +10 Vault"
+    "Raid 3": NORMAL_RAID_SOURCE,
+    "Raid 5": HEROIC_RAID_SOURCE,
+    "Raid 7": MYTHIC_RAID_SOURCE,
+    "Dungeon 10": DUNGEON_SOURCE
 }
 
 def find_item_source(inputString):
@@ -183,7 +188,7 @@ def add_to_item_bosses(itemName, bossName):
     itemBosses[itemName] = bossName
 
 #List of players with droptimizers.
-players = []
+players: list[Player] = []
 
 #Check to see if there's already a player by that name.  If not, we'll add
 #a new player object to the players list.  If yes, add this droptimizer data
@@ -458,7 +463,6 @@ def parse_qe_report(report_id):
         
         
 
-
 def graburl(url):
     try:
         if "raidbots.com" in url:
@@ -472,6 +476,46 @@ def graburl(url):
         print("ERROR with URL:")
         print(url)
         print("An unexpected error occurred:", e)
+
+
+def check_and_add_bis(player: Player, itemName: str, incomingValue: float, slot: str, source: str):
+    #If item is from normal or dungeon, then check and add bis
+    if source == NORMAL_RAID_SOURCE or source == DUNGEON_SOURCE:
+        if player.normal_bis.get_bis(slot) is None: 
+            player.normal_bis.set_bis(slot, itemName)
+            return
+            
+        current_bis = player.normal_bis.get_bis(slot)
+        if player.sims[current_bis] < incomingValue:
+            player.normal_bis.set_bis(slot, itemName)
+
+    #If item is from normal or dungeon, then check and add bis
+    if source == HEROIC_RAID_SOURCE or source == DUNGEON_SOURCE:
+        if player.heroic_bis.get_bis(slot) is None: 
+            player.heroic_bis.set_bis(slot, itemName)
+            return
+            
+        current_bis = player.heroic_bis.get_bis(slot)
+        if player.sims[current_bis] < incomingValue:
+            player.heroic_bis.set_bis(slot, itemName)
+    
+    #If item is from normal or dungeon, then check and add bis
+    if source == MYTHIC_RAID_SOURCE or source == DUNGEON_SOURCE:
+        if player.mythic_bis.get_bis(slot) is None: 
+            player.mythic_bis.set_bis(slot, itemName)
+            return
+            
+        current_bis = player.mythic_bis.get_bis(slot)
+        if player.sims[current_bis] < incomingValue:
+            player.mythic_bis.set_bis(slot, itemName)        
+
+def populate_bis_lists():
+    for player in players:
+        for key in player.sims:
+            val = player.sims[key]
+            slot = items[key]
+            source = itemSources[key] 
+            check_and_add_bis(player, key, val, slot, source)
 
 def main():
     #Ugly hack for stupid operating systems:
@@ -523,7 +567,8 @@ def main():
                 for d in data:
                     graburl(d)
 
-        
+    populate_bis_lists()
+    
     #Sort players alphabetically, and by role.  Tanks first, then DPS, then
     #healers.
     #Sort alphabetically first so that the role sorting actually works.
