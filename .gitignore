@@ -49,6 +49,10 @@ Pipfile.lock
 
 # Ignore generated CSV files with "droptimizers-" prefix
 droptimizers-*.csv
+normal-raid-choices-*.csv
+heroic-raid-choices-*.csv
+mythic-raid-choices-*.csv
+
 
 # ----------------------------------
 # Visual Studio Cache & Workspace Files
