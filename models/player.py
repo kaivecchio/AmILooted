@@ -7,9 +7,15 @@ class Player:
         self.sims = {}
         self.multispec = multispec
         self.normal_bis = BestInSlot()
+        self.normal_delta_matrix = {}
         self.heroic_bis = BestInSlot()
+        self.heroic_delta_matrix = {}
         self.mythic_bis = BestInSlot()
-        
+        self.mythic_delta_matrix = {}
+    
+    def __repr__(self):
+        return f"{self.name} playing {self.spec}"
+
         
 class BestInSlot:
     VALID_SLOTS = [ 
@@ -36,3 +42,14 @@ class BestInSlot:
     def __repr__(self):
         """String representation of the BiS gear."""
         return "\n".join([f"{slot}: {item or 'Not Set'}" for slot, item in self.bis_gear.items()])
+    
+class ItemCandidate:
+    def __init__(self, player: Player, item_val: float, item_delta: float, next_best_val: float, candidate_reason: str):
+        self.player = player
+        self.item_val = item_val
+        self.item_delta = item_delta
+        self.next_best_val = next_best_val
+        self.candidate_reason = candidate_reason
+        
+    def __repr__(self):
+        return f"{self.player} for {self.candidate_reason}, value is {self.item_val}."
