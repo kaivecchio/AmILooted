@@ -39,7 +39,7 @@ import datetime
 import json
 import re
 import utils.tier_names as tier_names
-from models.player import Player
+from models.player import Player, ItemCandidate
 import xml.etree.ElementTree as ET
 try:
     import requests
@@ -103,12 +103,15 @@ def add_to_items(itemname, itemSlot: str):
             return
     items[itemname] = itemSlot.lower()
     
-#Dictionary of all the item names (key) being simmed in anyone's droptimizers and their source (value).
+    
 NORMAL_RAID_SOURCE = "Normal Raid"
 HEROIC_RAID_SOURCE = "Heroic Raid"
 MYTHIC_RAID_SOURCE = "Mythic Raid"
 DUNGEON_SOURCE = "Mythic +10 Vault"
+BIS_REASON = "Best in slot"
+UPGRADE_PCT_REASON = "Upgrade percent"
 
+#Dictionary of all the item names (key) being simmed in anyone's droptimizers and their source (value).
 itemSources = {}
 sourcesLookup = { 
                  "raid-normal": NORMAL_RAID_SOURCE,
@@ -477,37 +480,79 @@ def graburl(url):
         print(url)
         print("An unexpected error occurred:", e)
 
+def calculate_delta(player: Player, itemName: str, incomingValue: float, slot: str, source: str):
+    if source == NORMAL_RAID_SOURCE or source == DUNGEON_SOURCE:
+        bis_item = player.normal_bis.get_bis(slot)
+        bis_value = player.sims[bis_item]
+        delta_value = incomingValue - bis_value
+        player.normal_delta_matrix[itemName] = delta_value
+    
+    if source == HEROIC_RAID_SOURCE or source == DUNGEON_SOURCE:
+        bis_item = player.heroic_bis.get_bis(slot)
+        bis_value = player.sims[bis_item]
+        delta_value = incomingValue - bis_value
+        player.heroic_delta_matrix[itemName] = delta_value
+        
+    if source == MYTHIC_RAID_SOURCE or source == DUNGEON_SOURCE:
+        bis_item = player.mythic_bis.get_bis(slot)
+        bis_value = player.sims[bis_item]
+        delta_value = incomingValue - bis_value
+        player.mythic_delta_matrix[itemName] = delta_value
+
+def build_delta_matrices():
+    for player in players:
+        for item in player.sims:
+            val = player.sims[item]
+            slot = items[item]
+            source = itemSources[item]
+            calculate_delta(player, item, val, slot, source)
+
 
 def check_and_add_bis(player: Player, itemName: str, incomingValue: float, slot: str, source: str):
     #If item is from normal or dungeon, then check and add bis
     if source == NORMAL_RAID_SOURCE or source == DUNGEON_SOURCE:
         if player.normal_bis.get_bis(slot) is None: 
             player.normal_bis.set_bis(slot, itemName)
-            return
-            
-        current_bis = player.normal_bis.get_bis(slot)
-        if player.sims[current_bis] < incomingValue:
-            player.normal_bis.set_bis(slot, itemName)
+        else:   
+            current_bis = player.normal_bis.get_bis(slot)
+            if player.sims[current_bis] < incomingValue:
+                player.normal_bis.set_bis(slot, itemName)
 
     #If item is from normal or dungeon, then check and add bis
     if source == HEROIC_RAID_SOURCE or source == DUNGEON_SOURCE:
         if player.heroic_bis.get_bis(slot) is None: 
             player.heroic_bis.set_bis(slot, itemName)
-            return
-            
-        current_bis = player.heroic_bis.get_bis(slot)
-        if player.sims[current_bis] < incomingValue:
-            player.heroic_bis.set_bis(slot, itemName)
+        else:    
+            current_bis = player.heroic_bis.get_bis(slot)
+            if player.sims[current_bis] < incomingValue:
+                player.heroic_bis.set_bis(slot, itemName)
     
     #If item is from normal or dungeon, then check and add bis
     if source == MYTHIC_RAID_SOURCE or source == DUNGEON_SOURCE:
         if player.mythic_bis.get_bis(slot) is None: 
             player.mythic_bis.set_bis(slot, itemName)
-            return
-            
-        current_bis = player.mythic_bis.get_bis(slot)
-        if player.sims[current_bis] < incomingValue:
-            player.mythic_bis.set_bis(slot, itemName)        
+        else:    
+            current_bis = player.mythic_bis.get_bis(slot)
+            if player.sims[current_bis] < incomingValue:
+                player.mythic_bis.set_bis(slot, itemName)        
+
+#Finds the next best item in this slot for this raid difficulty
+#This looping is starting to be expensive, there are probably smarter ways to achieve this
+def find_next_best(player: Player, item: str, source: str):
+    next_best = None
+    slot = items[item]
+    for key in player.sims:
+        thisSource = itemSources[key]
+        if thisSource != DUNGEON_SOURCE and thisSource != source:
+            continue
+        if items[key] != slot or key == item:
+            continue
+        if next_best is None:
+            next_best = player.sims[key]
+            continue
+        if player.sims[key] > next_best:
+            next_best = player.sims[key]
+    return next_best
 
 def populate_bis_lists():
     for player in players:
@@ -516,6 +561,101 @@ def populate_bis_lists():
             slot = items[key]
             source = itemSources[key] 
             check_and_add_bis(player, key, val, slot, source)
+
+item_Choices: dict[str, ItemCandidate] = {}
+def add_if_bis(item: str, source: str, choices, reason: str):
+    for player in players:
+            if item in player.sims and player.sims[item] > 0:
+                
+                if source == NORMAL_RAID_SOURCE:
+                    if player.normal_delta_matrix[item] == 0:
+                        choices.append(ItemCandidate(
+                            player,
+                            player.sims[item],
+                            player.normal_delta_matrix[item],
+                            find_next_best(player, item, source),
+                            reason))
+                        
+                if source == HEROIC_RAID_SOURCE:
+                    if player.heroic_delta_matrix[item] == 0:
+                        choices.append(ItemCandidate(
+                            player,
+                            player.sims[item],
+                            player.heroic_delta_matrix[item],
+                            find_next_best(player, item, source),
+                            reason))
+                        
+                if source == MYTHIC_RAID_SOURCE:
+                    if player.mythic_delta_matrix[item] == 0:
+                        choices.append(ItemCandidate(
+                            player,
+                            player.sims[item],
+                            player.mythic_delta_matrix[item],
+                            find_next_best(player, item, source),
+                            reason))
+
+def add_if_upgrade(item:str, source:str, choices, reason: str):
+    for player in players:
+            if item in player.sims and player.sims[item] > 0:
+                
+                if source == NORMAL_RAID_SOURCE:
+                    choices.append(ItemCandidate(
+                        player,
+                        player.sims[item],
+                        player.normal_delta_matrix[item],
+                        find_next_best(player, item, source),
+                        reason))
+                        
+                if source == HEROIC_RAID_SOURCE:
+                    choices.append(ItemCandidate(
+                        player,
+                        player.sims[item],
+                        player.heroic_delta_matrix[item],
+                        find_next_best(player, item, source),
+                        reason))
+                        
+                if source == MYTHIC_RAID_SOURCE:
+                    choices.append(ItemCandidate(
+                        player,
+                        player.sims[item],
+                        player.mythic_delta_matrix[item],
+                        find_next_best(player, item, source),
+                        reason))
+
+def create_choices():
+    no_choice_player = Player("No choice", None, None)
+    for item in sorted(items.keys()):
+        source = itemSources[item]
+        if source == DUNGEON_SOURCE:
+            continue
+        choices = []
+        add_if_bis(item, source, choices, BIS_REASON)
+        
+        if len(choices) > 4:
+            choices.sort(key=lambda x: x.next_best_val, reverse=True)
+            choices = choices[:5] 
+            item_Choices[item] = choices
+            continue
+        
+        non_bis_choices = []
+        add_if_upgrade(item, source, non_bis_choices, UPGRADE_PCT_REASON)
+        if len(non_bis_choices) > 0:
+            non_bis_choices.sort(key=lambda x: (x.item_val, x.next_best_val,), reverse=True)
+            
+        choices.sort(key=lambda x: x.next_best_val, reverse=True)
+        choices.extend(non_bis_choices)
+        choices = choices[:5]
+        item_Choices[item] = choices
+        
+        while len(choices) < 5:
+            choices.append(ItemCandidate(
+                        no_choice_player,
+                        0,
+                        0,
+                        0,
+                        "No candidate"))
+        
+
 
 def main():
     #Ugly hack for stupid operating systems:
@@ -568,6 +708,8 @@ def main():
                     graburl(d)
 
     populate_bis_lists()
+    build_delta_matrices()
+    create_choices()
     
     #Sort players alphabetically, and by role.  Tanks first, then DPS, then
     #healers.
@@ -581,9 +723,59 @@ def main():
 
     output = open(outfilename,"w")
     
+    mythicRaidFilename = "mythic-raid-choices-" + \
+                  datetime.datetime.fromtimestamp( \
+                  time.time()).strftime("%d-%m-%Y") + ".csv"
+                  
+    mythicRaidOutput = open(mythicRaidFilename,"w")
+    
+    heroicRaidFilename = "heroic-raid-choices-" + \
+                  datetime.datetime.fromtimestamp( \
+                  time.time()).strftime("%d-%m-%Y") + ".csv"
+                  
+    heroicRaidOutput = open(heroicRaidFilename,"w")
+    
+    normalRaidFilename = "normal-raid-choices-" + \
+                  datetime.datetime.fromtimestamp( \
+                  time.time()).strftime("%d-%m-%Y") + ".csv"
+                  
+    normalRaidOutput = open(normalRaidFilename,"w")
+    
     #Print headers for item, slot, and sources columns
     output.write("Item Name" + "," + "Slot" + "," + "Source" + "," + "Boss")
     
+    choicesFileHeaders = [
+        "Boss",
+        "Item Name",
+        "Choice 1",
+        "Choice 1 % Upgrade",
+        "Next Best Alternative",
+        "Choice Reason",
+        "Choice 2",
+        "Choice 2 % Upgrade",
+        "Next Best Alternative",
+        "Choice Reason",
+        "Choice 3",
+        "Choice 3 % Upgrade",
+        "Next Best Alternative",
+        "Choice Reason",        
+        "Choice 4",
+        "Choice 4 % Upgrade",
+        "Next Best Alternative",
+        "Choice Reason",
+        "Choice 5",
+        "Choice 5 % Upgrade",
+        "Next Best Alternative",
+        "Choice Reason",
+    ]
+    for header in choicesFileHeaders:
+        mythicRaidOutput.write(header)
+        mythicRaidOutput.write(",")
+        heroicRaidOutput.write(header)
+        heroicRaidOutput.write(",")
+        normalRaidOutput.write(header)
+        normalRaidOutput.write(",")
+
     #First, one row with the player names and an initial blank entry.
     #If someone only submitted sims for one spec, no need to specify specs
     #on this line.
@@ -596,6 +788,10 @@ def main():
             output.write(","+p.name)
 
     output.write("\n")
+    mythicRaidOutput.write("\n")
+    heroicRaidOutput.write("\n")
+    normalRaidOutput.write("\n")
+
     #Then, for each item, a row with that item's name and the appropriate sim.
 
     for key in sorted(items.keys()):
@@ -613,8 +809,36 @@ def main():
             else:
                 output.write(",")
         output.write("\n")
+    
+    for key in sorted(item_Choices.keys()):
+        if itemSources[key] == MYTHIC_RAID_SOURCE:
+            escaped_key = escape_csv_field(key)
+            escaped_itemBosses = escape_csv_field(itemBosses[key])
+            mythicRaidOutput.write(escaped_itemBosses + "," + escaped_key + ",")
+            
+            for choice in item_Choices[key]:
+                mythicRaidOutput.write(f"{choice.player.name}, {choice.item_val}, {choice.next_best_val}, {choice.candidate_reason},")
+            mythicRaidOutput.write("\n")
+        
+        if itemSources[key] == HEROIC_RAID_SOURCE:
+            escaped_key = escape_csv_field(key)
+            escaped_itemBosses = escape_csv_field(itemBosses[key])
+            heroicRaidOutput.write(escaped_itemBosses + "," + escaped_key + ",")
+            
+            for choice in item_Choices[key]:
+                heroicRaidOutput.write(f"{choice.player.name}, {choice.item_val}, {choice.next_best_val}, {choice.candidate_reason},")
+            heroicRaidOutput.write("\n")
 
-    print("Output written to " + outfilename + ".")
+        if itemSources[key] == NORMAL_RAID_SOURCE:
+            escaped_key = escape_csv_field(key)
+            escaped_itemBosses = escape_csv_field(itemBosses[key])
+            normalRaidOutput.write(escaped_itemBosses + "," + escaped_key + ",")
+            
+            for choice in item_Choices[key]:
+                normalRaidOutput.write(f"{choice.player.name}, {choice.item_val}, {choice.next_best_val}, {choice.candidate_reason},")
+            normalRaidOutput.write("\n")
+
+    print(f"Output written to {outfilename}, {mythicRaidFilename}, {heroicRaidFilename}, and {normalRaidFilename}.")
     print("Press Enter to exit.")
     input()
 
