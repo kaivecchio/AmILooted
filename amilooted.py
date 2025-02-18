@@ -37,6 +37,10 @@ import sys
 import time
 import datetime
 import json
+import re
+import utils.tier_names as tier_names
+from models.player import Player, ItemCandidate
+import xml.etree.ElementTree as ET
 try:
     import requests
 except:
@@ -45,35 +49,7 @@ except:
     print("Requests should be installed; this should only happen once.")
     import requests
 
-try:
-    from selenium import webdriver
-    from selenium.webdriver.common.keys import Keys
-    from selenium.webdriver.common.by import By
-except:
-    print("Selenium library not installed!  Installing...")
-    subprocess.call([sys.executable, "-m", "pip", "install", "selenium"])
-    print("Selenium should be installed; this should only happen once.")
-    from selenium import webdriver
-    from selenium.webdriver.common.keys import Keys
-    from selenium.webdriver.common.by import By
-
-
-#Substrings that reliably indicate that this is a tier piece.
-#This should be the only thing that needs to be updated for new patches,
-#unless raidbots changes something about their developer tools.
-tiernames = ["Cauldron Champion's",         #Death Knight
-             "Fel-Dealer's",                #Demon Hunter
-             "of Reclaiming Blight",        #Druid
-             "Opulent Treasurescale's",     #Evoker
-             "Tireless Collector's",        #Hunter
-             "Aspectral Emissary's",        #Mage
-             "Ageless Serpent's",           #Monk
-             "Aureate Sentry's",            #Paladin
-             "Confessor's Unshakable",      #Priest
-             "Spectral Gambler's",          #Rogue
-             "Gale Sovereign's",            #Shaman
-             "Spliced Fiendtrader's",       #Warlock
-             "Enforcer's Backalley"]        #Warrior
+tiernames = tier_names.tiernames
 
 #A dictionary that turns slot name into an appropriate gear name.
 #Used to build strings like "Tier Helmet".
@@ -87,15 +63,17 @@ slotdict = {"head":"Helmet",
             "feet":"Boots",
             "chest":"Chest"}
 
+def slot_to_piece(slot):
+    return slotdict[slot]
+
+
 def tiercheck(itemname):
     for t in tiernames:
         if t in itemname:
             return True
     return False
     
-def slot_to_piece(slot):
-    return slotdict[slot]
-
+    
 #To avoid adding a mess of disparate tier sets, condense all such things
 #into, e.g., "Tier Helm 441"
 def tierfilter(itemname, key):
@@ -108,187 +86,112 @@ def tierfilter(itemname, key):
     return itemname
 
 
-#Try to replace tier names with, e.g., "Tier Helm 441", without knowing
-#the actual slot.  This might be less reliable than tierfilter, but I'd rather
-#not resort to hardcoding every piece name just yet.
-def tierfilter_qe(itemname):
-    if tiercheck(itemname):
-        if "helm" in itemname.lower() or \
-           "horns" in itemname.lower() or \
-           "hood" in itemname.lower() or \
-           "bough" in itemname.lower() or \
-           "crown" in itemname.lower() or \
-           "face" in itemname.lower() or \
-           "cowl" in itemname.lower() or \
-           "cover" in itemname.lower() or \
-           "mask" in itemname.lower() or \
-           "gaze" in itemname.lower() or \
-           "scowl" in itemname.lower() or \
-           "casque" in itemname.lower() or \
-           "coif" in itemname.lower() or \
-           "chronocap" in itemname.lower() or \
-           "hatsuburi" in itemname.lower() or \
-           "barbute" in itemname.lower() or \
-           "crest" in itemname.lower() or \
-           "domeplate" in itemname.lower() or \
-           "noetic" in itemname.lower() or \
-           "skull" in itemname.lower() or \
-           "emptiness" in itemname.lower() or \
-           "semblance" in itemname.lower() or \
-           "galea" in itemname.lower() or \
-           "eye" in itemname.lower() or \
-           "impalers" in itemname.lower() or \
-           "pledge" in itemname.lower() or \
-           "halo" in itemname.lower() or \
-           "transcendence" in itemname.lower() or \
-           "mane" in itemname.lower() or \
-           "branches" in itemname.lower() or \
-           "visor" in itemname.lower() or \
-           "visage" in itemname.lower():
-            return "Tier Helmet"
-        if "pauld" in itemname.lower() or \
-           "shoulder" in itemname.lower() or \
-           "mantle" in itemname.lower() or \
-           "wings" in itemname.lower() or \
-           "trophy" in itemname.lower() or \
-           "aurora" in itemname.lower() or \
-           "spines" in itemname.lower() or \
-           "devotion" in itemname.lower() or \
-           "erpads" in itemname.lower() or \
-           "skewers" in itemname.lower() or \
-           "horned memento" in itemname.lower() or \
-           "wisdom" in itemname.lower() or \
-           "sandbrace" in itemname.lower() or \
-           "finest hunt" in itemname.lower() or \
-           "metronomes" in itemname.lower() or \
-           "hopeful effigy" in itemname.lower() or \
-           "enduring effigy" in itemname.lower() or \
-           "ailettes" in itemname.lower() or \
-           "companions" in itemname.lower() or \
-           "spikes" in itemname.lower() or \
-           "concourse" in itemname.lower() or \
-           "plumes" in itemname.lower() or \
-           "taxidermy" in itemname.lower() or \
-           "dominion" in itemname.lower() or \
-           "beacons" in itemname.lower() or \
-           "altar" in itemname.lower() or \
-           "maw of the greatlynx" in itemname.lower() or \
-           "fumaroles" in itemname.lower() or \
-           "roaring will" in itemname.lower() or \
-           "hunted heads" in itemname.lower() or \
-           "radiance" in itemname.lower() or \
-           "screamplate" in itemname.lower() or \
-           "zephyrs" in itemname.lower() or \
-           "vents" in itemname.lower() or \
-           "servants" in itemname.lower() or \
-           "jaws" in itemname.lower() or \
-           "reavers" in itemname.lower() or \
-           "amice" in itemname.lower():
-            return "Tier Pauldrons"
-        if "vest" in itemname.lower() or \
-           "plackart" in itemname.lower() or \
-           "chest" in itemname.lower() or \
-           "hauberk" in itemname.lower() or \
-           "cuirass" in itemname.lower() or \
-           "brigandine" in itemname.lower() or \
-           "command" in itemname.lower() or \
-           "adornments" in itemname.lower() or \
-           "casket" in itemname.lower() or \
-           "binding" in itemname.lower() or \
-           "raiment" in itemname.lower() or \
-           "patchwork" in itemname.lower() or \
-           "warplate" in itemname.lower() or \
-           "cassock" in itemname.lower() or \
-           "harness" in itemname.lower() or \
-           "razorhide" in itemname.lower() or \
-           "plastron" in itemname.lower() or \
-           "breast" in itemname.lower() or \
-           ("coat" in itemname.lower() and not "coattails" in itemname.lower() and not "petticoat" in itemname.lower())or \
-           "nexus wraps" in itemname.lower() or \
-           "gatecrasher's gi" in itemname.lower() or \
-           "hide of the" in itemname.lower() or \
-           "scales of the" in itemname.lower() or \
-           "encasement" in itemname.lower() or \
-           "battlegear" in itemname.lower() or \
-           "ribcage" in itemname.lower() or \
-           "gown" in itemname.lower() or \
-           "inked coils" in itemname.lower() or \
-           "soul engine" in itemname.lower() or \
-           "tunic" in itemname.lower() or \
-           "robe" in itemname.lower():
-            return "Tier Chest"
-        if "grips" in itemname.lower() or \
-           "gauntlet" in itemname.lower() or \
-           "hand" in itemname.lower() or \
-           "claws" in itemname.lower() or \
-           "skinners" in itemname.lower() or \
-           "glove" in itemname.lower() or \
-           "fist" in itemname.lower() or \
-           "protectors" in itemname.lower() or \
-           "grasp" in itemname.lower() or \
-           "thorns" in itemname.lower() or \
-           "talons" in itemname.lower() or \
-           "clawguards" in itemname.lower() or \
-           "touch" in itemname.lower() or \
-           "crushers" in itemname.lower() or \
-           "castigation" in itemname.lower() or \
-           "mitts" in itemname.lower() or \
-           "sleeves" in itemname.lower() or \
-           "eviscerators" in itemname.lower() or \
-           "rippers" in itemname.lower() or \
-           "gold-counters" in itemname.lower() or \
-           "knuckles" in itemname.lower():
-            return "Tier Gloves"
-        #Check "legg" instead of "leg" because "legendary" might be part of an
-        #item name at some point, but this will catch "leggings" and "legguards"
-        if "legg" in itemname.lower() or \
-           "legpl" in itemname.lower() or \
-           "schynbalds" in itemname.lower() or \
-           "pant" in itemname.lower() or \
-           "chausses" in itemname.lower() or \
-           "poleyns" in itemname.lower() or \
-           "trousers" in itemname.lower() or \
-           "faulds" in itemname.lower() or \
-           "breeches" in itemname.lower() or \
-           "tights" in itemname.lower() or \
-           "blazewraps" in itemname.lower() or \
-           "greaves" in itemname.lower() or \
-           "waders" in itemname.lower() or \
-           "burdens" in itemname.lower() or \
-           "cuisses" in itemname.lower() or \
-           "kilt" in itemname.lower() or \
-           "tassets" in itemname.lower() or \
-           "sarong" in itemname.lower() or \
-           "stalkings" in itemname.lower() or \
-           "coattails" in itemname.lower() or \
-           "moccasins of reclaiming blight" in itemname.lower() or \
-           "petticoat" in itemname.lower() or \
-           "braies" in itemname.lower():
-            return "Tier Pants"
-        print("ERROR: Could not resolve " + itemname + " properly!  Left as-is.")
-    return itemname
+#The QE/wowhead calls give us verbose details on where the item could go, we want to compare with the best use anyways so we standardize them.
+qeWeaponSlots = ["One-Hand", "Ranged", "Two-Hand"]
+def standardize_qe_item_slot(inputSlot):
+    if inputSlot in qeWeaponSlots:
+        return "main_hand"
+    if inputSlot == "Off Hand" or inputSlot == "Held In Off-hand":
+        return "off_hand"
+    return inputSlot
 
-#List of all the item names being simmed in anyone's droptimizers.
-items = []
-def add_to_items(itemname):
-    for i in items:
-        if i == itemname:
+
+#Dictionary of all the item names (key) being simmed in anyone's droptimizers and their item slots (value).
+items = {}
+def add_to_items(itemname, itemSlot: str):
+    if itemname in items:
             return
-    items.append(itemname)
+    items[itemname] = itemSlot.lower()
+    
+    
+NORMAL_RAID_SOURCE = "Normal Raid"
+HEROIC_RAID_SOURCE = "Heroic Raid"
+MYTHIC_RAID_SOURCE = "Mythic Raid"
+DUNGEON_SOURCE = "Mythic +10 Vault"
+BIS_REASON = "Best in slot"
+UPGRADE_PCT_REASON = "Upgrade percent"
+
+#Dictionary of all the item names (key) being simmed in anyone's droptimizers and their source (value).
+itemSources = {}
+sourcesLookup = { 
+                 "raid-normal": NORMAL_RAID_SOURCE,
+                 "raid-heroic": HEROIC_RAID_SOURCE,
+                 "raid-mythic": MYTHIC_RAID_SOURCE,
+                 "dungeon-mythic-weekly10": DUNGEON_SOURCE
+}
+
+qeSourcesLookup = {
+    "Raid 3": NORMAL_RAID_SOURCE,
+    "Raid 5": HEROIC_RAID_SOURCE,
+    "Raid 7": MYTHIC_RAID_SOURCE,
+    "Dungeon 10": DUNGEON_SOURCE
+}
+
+def find_item_source(inputString):
+    for substring, mapped in sourcesLookup.items():
+        if substring in inputString:
+            return mapped
+    print("Item source not found, inputString:" + inputString)
+
+def add_to_item_sources(itemname, itemSource):
+    if itemname in itemSources:
+            return
+    itemSources[itemname] = itemSource
+    
+#Dictionary of all the item names (key) being simmed in anyone's droptimizers and the boss they drop from (value).
+itemBosses = {}
+bossesList = [
+    "Mythic+ Dungeons",
+    "Trash Drop",
+    "Ulgrax the Devourer",
+    "The Bloodbound Horror",
+    "Sikran, Captain of the Sureki",
+    "Rasha'nan",
+    "Broodtwister Ovi'nax",
+    "Nexus-Princess Ky'veza",
+    "The Silken Court",
+    "Queen Ansurek",
+    "Vexie and the Geargrinders",
+    "Cauldron of Carnage",
+    "Rik Reverb",
+    "Stix Bunkjunker",
+    "Sprocketmonger Lockenstock",
+    "The One-Armed Bandit",
+    "Mug'Zee, Heads of Security",
+    "Chrome King Gallywix"
+]
+
+def find_item_boss(inputString):
+    for boss in bossesList:
+        if boss in inputString:
+            return boss  # Return the substring that is found
+    print("Boss drop for item not found, inputString:" + inputString)
+
+
+def resolve_qe_item_boss(inputString: str):
+    # 1. Remove the last 3 digits from input_string, if present
+    #    Regex finds 3 digits (\d{3}) at the very end of the string ($)
+    truncated_input = re.sub(r'\d{3}$', '', inputString).rstrip()
+    
+    # 2. Iterate over itemBosses' keys, removing last 3 digits from each key
+    for key, value in itemBosses.items():
+        truncated_key = re.sub(r'\d{3}$', '', key).rstrip()
+
+        # 3. Compare the truncated forms
+        if truncated_key == truncated_input:
+            return value
+
+    # 4. If no match was found
+    return "Unkown Boss"
+
+
+def add_to_item_bosses(itemName, bossName):
+    if itemName in itemBosses:
+        return
+    itemBosses[itemName] = bossName
 
 #List of players with droptimizers.
-players = []
-
-#Store all droptimizer results for a player in a dict associated with that
-#player.
-class Player:
-    def __init__(self, name, spec, multispec):
-        self.name = name
-        self.spec = spec
-        self.sims = {}
-        self.multispec = multispec
-
-
+players: list[Player] = []
 
 #Check to see if there's already a player by that name.  If not, we'll add
 #a new player object to the players list.  If yes, add this droptimizer data
@@ -329,6 +232,15 @@ def rolekey(p):
         return 2
     return 1
 
+def escape_csv_field(field):
+    # First, escape any existing double quotes by doubling them
+    field = field.replace('"', '""')
+    
+    # If the field contains a comma, a double quote, or a newline,
+    # enclose it in double quotes.
+    if any(c in field for c in [',', '"', '\n']):
+        field = f'"{field}"'
+    return field
 
 def grabraidbots(url):
     #Add a trailing / if we didn't already have one
@@ -379,7 +291,8 @@ def grabraidbots(url):
     relevant = False
     itemname = ""
     gearnames = {}
-    for line in inputdata:
+    for i in range(len(inputdata)- 1):
+        line = inputdata[i]
         if line == "# Actors":
             relevant = True
             continue
@@ -396,13 +309,26 @@ def grabraidbots(url):
             continue
         if line[0] == "#":
             itemname = line.split(" - ")[0][1:].strip()
+            pattern = r'\+=([A-Za-z_]+)(?:[12])?=,'
+
+            match = re.search(pattern, inputdata[i+1])
+            if match:
+                itemslot = match.group(1)
+            else:
+                # Handle the case where no match is found.
+                # Example line we're looking for:
+                # 'profileset."1273/2607/raid-normal/212388/597/3368/main_hand//"+=main_hand=,id=212388,enchant_id=3368,bonus_id=4822/4786/1498/10273'
+                itemslot = "weapon/off-hand/shield"
+                print("No match found in line:", inputdata[i+1])
             #Ugly: if itemname is a tier piece, don't add it to the list of
             #items just yet.  Instead, we'll be changing itemname on the next
             #pass through this loop before we add it; we need the additional
             #context of the next line to figure out how to do this properly 
             #without hardcoding a lot of names.
             if not tiercheck(itemname):
-                add_to_items(itemname)
+                add_to_items(itemname, itemslot)
+                add_to_item_sources(itemname, find_item_source(inputdata[i+1]))
+                add_to_item_bosses(itemname, find_item_boss(inputdata[i]))
             continue
         
         key = line.split("\"")[1]
@@ -425,7 +351,7 @@ def grabraidbots(url):
         key = line.split(",")[0]
         item = gearnames[key]
         newdps = float(line.split(",")[1])
-        percentupgrade = int(10000 * (newdps - baselinedps)/baselinedps) * 0.01
+        percentupgrade = round(int(10000 * (newdps - baselinedps)/baselinedps) * 0.01, 3)
         if item in players[pindex].sims:
             #This means we already added the item to the player's sims at some
             #point, probably because this is a ring or trinket and we simmed it
@@ -435,134 +361,301 @@ def grabraidbots(url):
                 players[pindex].sims.update({item:percentupgrade})
         else:
             players[pindex].sims.update({item:percentupgrade})
-    
 
 
-def grabqe(url,charname):
-    #QE Live interoperability sucks, so this is really hacky.
-    #We can't just do a wget on the URL, because the information we care about
-    #is encoded in 7 MB of autogenerated javascript.
-    #Load the page in Firefox to run the javascript, and then get the page
-    #source after that's been run.
-    driver = webdriver.Firefox()
-    driver.get(url)
-    time.sleep(5) #Delay to let the javascript run
-    pagesource = driver.page_source
-    driver.close()
-    
-    #Munge the page source for the information we need.
-    #There will be a smattering of "ilvl=" substrings; each will be followed by
-    #a three-digit item level.
-    #index+5:index+8 gives what we want.
-    #XXX: A few expansions from now, ilvl may hit four digits if there isn't
-    #another ilvl squish.  This seems unlikely to matter, if only because
-    #last time this happened only legendaries were ilvl 1000 (everything
-    #else capped at 985), and this was immediately followed by the squish.
-    #There will also be a smattering of 'justify-content: center;">'
-    #substrings.  Each of these will be followed either by an item name or
-    #by the percentage upgrade.  We want the string from there up until the
-    #next <.
-    #index+26:index+(sourcestring[index+26:].search("<"))+26
-    #Since all of these are in order, we can do a couple of passes through
-    #the damn thing and assemble the information afterward.
-    
-    ilvls = []
-    itemnames = []
-    upgradepercent = []
-    
-    
-    sourcecopy = pagesource
-    while True:
-        i = pagesource.find("ilvl=")
-        
-        if i == -1:
-            break
-        else:
-            ilvls.append(pagesource[i+5:i+8])
-            pagesource = pagesource[i+8:]
-    
-    searchindex = 0
-    tempresults = []
-    while True:
-        i = sourcecopy.find('justify-content: center;">')
-        
-        if i == -1:
-            break
-        else:
-            tempresults.append(sourcecopy[i+26:i+26+sourcecopy[i+26:].find("<")])
-            sourcecopy = sourcecopy[i+26:]
-    
-    itemnames = tempresults[::2]
-    upgradepercent = tempresults[1::2]
+def wowhead_item_name(item_id, ilvl):
+    url = f"https://www.wowhead.com/item={item_id}?xml"
+    resp = requests.get(url)
+    if not resp.ok:
+        return None
 
-    #For raidbots droptimizers, we can get the spec directly.
-    #QE Live not so much; we can't even figure out the player's name
-    #from the link.
-    #We can figure out the class by cross-referencing the tier pieces
-    #with the set strings, but if the class is Priest we still don't know if
-    #it's Holy or Discipline.
-    #Best we can do there is "Healer" spec, and if multiple sims are submitted
-    #include both results with a slash.
-    spec = ""
-    for item in itemnames:
-        if tiernames[2] in item:
-            spec = "Restoration"
-            break
-        if tiernames[3] in item:
-            spec = "Preservation"
-            break
-        if tiernames[6] in item:
-            spec = "Mistweaver"
-            break
-        if tiernames[7] in item:
-            spec = "Holy"
-            break
-        if tiernames[8] in item:
-            spec = "Healer"
-            break
-        if tiernames[10] in item:
-            spec = "Restoration"
-            break
+    # Parse XML
+    root = ET.fromstring(resp.text)
+    # The <wowhead> root usually contains <item> child
+    item_elem = root.find("item")
+    if item_elem is not None:
+        # <name> sub-element typically holds the item name
+        name_elem = item_elem.find("name")
+        if name_elem is not None:
+            itemName = name_elem.text + " " + ilvl
+            slot_elem = item_elem.find("inventorySlot")
+            add_to_items(itemName, standardize_qe_item_slot(slot_elem.text))
+            return itemName
+    return None
 
-    for i in range(len(itemnames)):
-        itemnames[i] = tierfilter_qe(itemnames[i])
+def get_qe_report_id(url: str) -> str:
+    """
+    Extracts the QE Live report ID from a URL like:
+      https://questionablyepic.com/live/upgradereport/<reportId>
+    and returns <reportId>.
+    """
+    # Strip trailing slash, if present
+    url = url.rstrip('/')
+
+    # Split by '/' and return the last chunk
+    parts = url.split('/')
+    return parts[-1]
+
+def parse_qe_report(report_id):
+    url = f"https://questionablyepic.com/api/getUpgradeReport.php?reportID={report_id}"
+    resp = requests.get(url)
     
-    
-    for i in range(len(ilvls)):
-        itemnames[i] += " " + ilvls[i]
-        add_to_items(itemnames[i])
-    
-    #Trim leading +, trailing % from QE's prettyprinting
-    for i in range(len(upgradepercent)):
-        if upgradepercent[i] == "+0":
-            upgradepercent[i] = "0"
-        else:
-            upgradepercent[i] = upgradepercent[i][1:-1]
-    
-    
-    
+    # First parse
+    data = resp.json()
+
+    # data is apparently a string with encoded JSON
+    if isinstance(data, str):
+        # Do a second decode
+        data2 = json.loads(data)
+        data = data2
+    #else:
+        # data is already a dict
+
+    # Basic metadata
+    report_id = data["id"]                 # e.g. "chunzqjetpaz"
+    date_created = data["dateCreated"]     # e.g. "2024 - 11 - 12"
+    charname = data["playername"]       # e.g. "Cynnee"
+    realm = data["realm"]                 # e.g. "Thrall"
+    region = data["region"]               # e.g. "US"
+    spec = data.get("spec", "")           # e.g. "Holy Paladin"
     pindex = add_player(charname, spec)
-    
-    for i in range(len(itemnames)):
-        if spec == "Healer" and itemnames[i] in players[pindex].sims:
-            tempval = players[pindex].sims[itemnames[i]]
-            players[pindex].sims.update({itemnames[i]:tempval+"/"+upgradepercent[i]})
+    # The "results" list holds all item upgrades
+    results = data["results"]             # array of dicts
+
+    # Each dict includes:
+    #   item            (item ID, e.g. 133286)
+    #   dropLoc         (e.g. "Dungeon", "Raid", "Crafted")
+    #   dropDifficulty  (integer or "" for crafted)
+    #   level           (item level)
+    #   score           (QE internal score, e.g. 0.003...)
+    #   rawDiff         (raw difference, e.g. 4371)
+    #   percDiff        (percentage difference, e.g. 0.273)
+
+    # Do something with that data. For example, let's build a structured list:
+    for entry in results:
+        ilvl = entry["level"]
+        itemName = wowhead_item_name(entry["item"], str(ilvl))
+        location = entry["dropLoc"]
+        difficulty = entry.get("dropDifficulty")
+        
+        #Add the item to itemSources if not recognized
+        itemSourceRaw = location + " " + str(difficulty)
+        if itemSourceRaw in qeSourcesLookup.keys():
+            itemSource = qeSourcesLookup[itemSourceRaw]
         else:
-            players[pindex].sims.update({itemnames[i]:upgradepercent[i]})
+            itemSource = "Uknown Item Source"
+        add_to_item_sources(itemName, itemSource)
+        
+        #TODO: Add to itemBosses properly via a mapping for healer exclusive items
+        if itemName not in itemBosses.keys():
+            add_to_item_bosses(itemName, resolve_qe_item_boss(itemName))
+        
+        percentage = entry["percDiff"]   # in decimal form (0.273 = 27.3%)
+        
+        if itemName in players[pindex].sims:
+            #This means we already added the item to the player's sims at some
+            #point, probably because this is a ring or trinket and we simmed it
+            #in the first slot before and this is the second slot.  Check to see
+            #if this is better; only update if it is.
+            if percentage > players[pindex].sims[itemName]:
+                players[pindex].sims[itemName] = (percentage)
+            #else: 
+                #do nothing
+        else:
+            players[pindex].sims[itemName] = (percentage)
+        
+        
 
-
-def graburl(url,name):
+def graburl(url):
     try:
         if "raidbots.com" in url:
             print("Checking " + url)
             grabraidbots(url)
         if "questionablyepic.com" in url:
             print("Checking " + url)
-            grabqe(url,name)
-    except:
+            parse_qe_report(get_qe_report_id(url))
+            
+    except Exception as e:
         print("ERROR with URL:")
         print(url)
-        print("Either this was malformed or the sim has expired.")
+        print("An unexpected error occurred:", e)
+
+def calculate_delta(player: Player, itemName: str, incomingValue: float, slot: str, source: str):
+    if source == NORMAL_RAID_SOURCE or source == DUNGEON_SOURCE:
+        bis_item = player.normal_bis.get_bis(slot)
+        bis_value = player.sims[bis_item]
+        delta_value = incomingValue - bis_value
+        player.normal_delta_matrix[itemName] = delta_value
+    
+    if source == HEROIC_RAID_SOURCE or source == DUNGEON_SOURCE:
+        bis_item = player.heroic_bis.get_bis(slot)
+        bis_value = player.sims[bis_item]
+        delta_value = incomingValue - bis_value
+        player.heroic_delta_matrix[itemName] = delta_value
+        
+    if source == MYTHIC_RAID_SOURCE or source == DUNGEON_SOURCE:
+        bis_item = player.mythic_bis.get_bis(slot)
+        bis_value = player.sims[bis_item]
+        delta_value = incomingValue - bis_value
+        player.mythic_delta_matrix[itemName] = delta_value
+
+def build_delta_matrices():
+    for player in players:
+        for item in player.sims:
+            val = player.sims[item]
+            slot = items[item]
+            source = itemSources[item]
+            calculate_delta(player, item, val, slot, source)
+
+
+def check_and_add_bis(player: Player, itemName: str, incomingValue: float, slot: str, source: str):
+    #If item is from normal or dungeon, then check and add bis
+    if source == NORMAL_RAID_SOURCE or source == DUNGEON_SOURCE:
+        if player.normal_bis.get_bis(slot) is None: 
+            player.normal_bis.set_bis(slot, itemName)
+        else:   
+            current_bis = player.normal_bis.get_bis(slot)
+            if player.sims[current_bis] < incomingValue:
+                player.normal_bis.set_bis(slot, itemName)
+
+    #If item is from normal or dungeon, then check and add bis
+    if source == HEROIC_RAID_SOURCE or source == DUNGEON_SOURCE:
+        if player.heroic_bis.get_bis(slot) is None: 
+            player.heroic_bis.set_bis(slot, itemName)
+        else:    
+            current_bis = player.heroic_bis.get_bis(slot)
+            if player.sims[current_bis] < incomingValue:
+                player.heroic_bis.set_bis(slot, itemName)
+    
+    #If item is from normal or dungeon, then check and add bis
+    if source == MYTHIC_RAID_SOURCE or source == DUNGEON_SOURCE:
+        if player.mythic_bis.get_bis(slot) is None: 
+            player.mythic_bis.set_bis(slot, itemName)
+        else:    
+            current_bis = player.mythic_bis.get_bis(slot)
+            if player.sims[current_bis] < incomingValue:
+                player.mythic_bis.set_bis(slot, itemName)        
+
+#Finds the next best item in this slot for this raid difficulty
+#This looping is starting to be expensive, there are probably smarter ways to achieve this
+def find_next_best(player: Player, item: str, source: str):
+    next_best = None
+    slot = items[item]
+    for key in player.sims:
+        thisSource = itemSources[key]
+        if thisSource != DUNGEON_SOURCE and thisSource != source:
+            continue
+        if items[key] != slot or key == item:
+            continue
+        if next_best is None:
+            next_best = player.sims[key]
+            continue
+        if player.sims[key] > next_best:
+            next_best = player.sims[key]
+    return next_best
+
+def populate_bis_lists():
+    for player in players:
+        for key in player.sims:
+            val = player.sims[key]
+            slot = items[key]
+            source = itemSources[key] 
+            check_and_add_bis(player, key, val, slot, source)
+
+item_Choices: dict[str, ItemCandidate] = {}
+def add_if_bis(item: str, source: str, choices, reason: str):
+    for player in players:
+            if item in player.sims and player.sims[item] > 0:
+                
+                if source == NORMAL_RAID_SOURCE:
+                    if player.normal_delta_matrix[item] == 0:
+                        choices.append(ItemCandidate(
+                            player,
+                            player.sims[item],
+                            player.normal_delta_matrix[item],
+                            find_next_best(player, item, source),
+                            reason))
+                        
+                if source == HEROIC_RAID_SOURCE:
+                    if player.heroic_delta_matrix[item] == 0:
+                        choices.append(ItemCandidate(
+                            player,
+                            player.sims[item],
+                            player.heroic_delta_matrix[item],
+                            find_next_best(player, item, source),
+                            reason))
+                        
+                if source == MYTHIC_RAID_SOURCE:
+                    if player.mythic_delta_matrix[item] == 0:
+                        choices.append(ItemCandidate(
+                            player,
+                            player.sims[item],
+                            player.mythic_delta_matrix[item],
+                            find_next_best(player, item, source),
+                            reason))
+
+def add_if_upgrade(item:str, source:str, choices, reason: str):
+    for player in players:
+            if item in player.sims and player.sims[item] > 0:
+                
+                if source == NORMAL_RAID_SOURCE:
+                    choices.append(ItemCandidate(
+                        player,
+                        player.sims[item],
+                        player.normal_delta_matrix[item],
+                        find_next_best(player, item, source),
+                        reason))
+                        
+                if source == HEROIC_RAID_SOURCE:
+                    choices.append(ItemCandidate(
+                        player,
+                        player.sims[item],
+                        player.heroic_delta_matrix[item],
+                        find_next_best(player, item, source),
+                        reason))
+                        
+                if source == MYTHIC_RAID_SOURCE:
+                    choices.append(ItemCandidate(
+                        player,
+                        player.sims[item],
+                        player.mythic_delta_matrix[item],
+                        find_next_best(player, item, source),
+                        reason))
+
+def create_choices():
+    no_choice_player = Player("No choice", None, None)
+    for item in sorted(items.keys()):
+        source = itemSources[item]
+        if source == DUNGEON_SOURCE:
+            continue
+        choices = []
+        add_if_bis(item, source, choices, BIS_REASON)
+        
+        if len(choices) > 4:
+            choices.sort(key=lambda x: x.next_best_val, reverse=True)
+            choices = choices[:5] 
+            item_Choices[item] = choices
+            continue
+        
+        non_bis_choices = []
+        add_if_upgrade(item, source, non_bis_choices, UPGRADE_PCT_REASON)
+        if len(non_bis_choices) > 0:
+            non_bis_choices.sort(key=lambda x: (x.item_val, x.next_best_val,), reverse=True)
+            
+        choices.sort(key=lambda x: x.next_best_val, reverse=True)
+        choices.extend(non_bis_choices)
+        choices = choices[:5]
+        item_Choices[item] = choices
+        
+        while len(choices) < 5:
+            choices.append(ItemCandidate(
+                        no_choice_player,
+                        0,
+                        0,
+                        0,
+                        "No candidate"))
+        
+
 
 def main():
     #Ugly hack for stupid operating systems:
@@ -588,7 +681,7 @@ def main():
         linenum = 0
         for line in simlines:
             linenum += 1
-            graburl(line.split()[-1],line.split(":")[0])
+            graburl(line.split()[-1])
 
     else:
         spreadsheeturl = "https://docs.google.com/spreadsheets/d/1jeBFHraMVA-IiuP-nLD0IWIaQom2av7XgDPa7qt43Ls/gviz/tq?tqx=out:csv&sheet=Droptimizer"
@@ -612,9 +705,12 @@ def main():
                 #might be necessary if there are notes next to some urls).
                 data = cell[1:-1].split()
                 for d in data:
-                    graburl(d,name)
+                    graburl(d)
 
-        
+    populate_bis_lists()
+    build_delta_matrices()
+    create_choices()
+    
     #Sort players alphabetically, and by role.  Tanks first, then DPS, then
     #healers.
     #Sort alphabetically first so that the role sorting actually works.
@@ -627,6 +723,59 @@ def main():
 
     output = open(outfilename,"w")
     
+    mythicRaidFilename = "mythic-raid-choices-" + \
+                  datetime.datetime.fromtimestamp( \
+                  time.time()).strftime("%d-%m-%Y") + ".csv"
+                  
+    mythicRaidOutput = open(mythicRaidFilename,"w")
+    
+    heroicRaidFilename = "heroic-raid-choices-" + \
+                  datetime.datetime.fromtimestamp( \
+                  time.time()).strftime("%d-%m-%Y") + ".csv"
+                  
+    heroicRaidOutput = open(heroicRaidFilename,"w")
+    
+    normalRaidFilename = "normal-raid-choices-" + \
+                  datetime.datetime.fromtimestamp( \
+                  time.time()).strftime("%d-%m-%Y") + ".csv"
+                  
+    normalRaidOutput = open(normalRaidFilename,"w")
+    
+    #Print headers for item, slot, and sources columns
+    output.write("Item Name" + "," + "Slot" + "," + "Source" + "," + "Boss")
+    
+    choicesFileHeaders = [
+        "Boss",
+        "Item Name",
+        "Choice 1",
+        "Choice 1 % Upgrade",
+        "Next Best Alternative",
+        "Choice Reason",
+        "Choice 2",
+        "Choice 2 % Upgrade",
+        "Next Best Alternative",
+        "Choice Reason",
+        "Choice 3",
+        "Choice 3 % Upgrade",
+        "Next Best Alternative",
+        "Choice Reason",        
+        "Choice 4",
+        "Choice 4 % Upgrade",
+        "Next Best Alternative",
+        "Choice Reason",
+        "Choice 5",
+        "Choice 5 % Upgrade",
+        "Next Best Alternative",
+        "Choice Reason",
+    ]
+    for header in choicesFileHeaders:
+        mythicRaidOutput.write(header)
+        mythicRaidOutput.write(",")
+        heroicRaidOutput.write(header)
+        heroicRaidOutput.write(",")
+        normalRaidOutput.write(header)
+        normalRaidOutput.write(",")
+
     #First, one row with the player names and an initial blank entry.
     #If someone only submitted sims for one spec, no need to specify specs
     #on this line.
@@ -639,20 +788,57 @@ def main():
             output.write(","+p.name)
 
     output.write("\n")
+    mythicRaidOutput.write("\n")
+    heroicRaidOutput.write("\n")
+    normalRaidOutput.write("\n")
+
     #Then, for each item, a row with that item's name and the appropriate sim.
-    items.sort()
-    for item in items:
-        #Some items have commas in them.  Because we're using commas as
-        #separators in this spreadsheet, they must be removed in the output.
-        output.write(item.replace(",",""))
+
+    for key in sorted(items.keys()):
+        # Prepare the key field: if it contains a comma, enclose it in double quotes.
+        escaped_key = escape_csv_field(key)
+        escaped_item = escape_csv_field(items[key])
+        escaped_itemSource = escape_csv_field(itemSources[key])
+        escaped_itemBosses = escape_csv_field(itemBosses[key])
+        #Write the item, slot, and source into their columns, deliminated by a comma
+        output.write(escaped_key + "," + escaped_item + "," + escaped_itemSource + "," + escaped_itemBosses)
+        
         for p in players:
-            if item in p.sims:
-                output.write("," + str(p.sims[item]))
+            if key in p.sims:
+                output.write("," + str(p.sims[key]))
             else:
                 output.write(",")
         output.write("\n")
+    
+    for key in sorted(item_Choices.keys()):
+        if itemSources[key] == MYTHIC_RAID_SOURCE:
+            escaped_key = escape_csv_field(key)
+            escaped_itemBosses = escape_csv_field(itemBosses[key])
+            mythicRaidOutput.write(escaped_itemBosses + "," + escaped_key + ",")
+            
+            for choice in item_Choices[key]:
+                mythicRaidOutput.write(f"{choice.player.name}, {choice.item_val}, {choice.next_best_val}, {choice.candidate_reason},")
+            mythicRaidOutput.write("\n")
+        
+        if itemSources[key] == HEROIC_RAID_SOURCE:
+            escaped_key = escape_csv_field(key)
+            escaped_itemBosses = escape_csv_field(itemBosses[key])
+            heroicRaidOutput.write(escaped_itemBosses + "," + escaped_key + ",")
+            
+            for choice in item_Choices[key]:
+                heroicRaidOutput.write(f"{choice.player.name}, {choice.item_val}, {choice.next_best_val}, {choice.candidate_reason},")
+            heroicRaidOutput.write("\n")
 
-    print("Output written to " + outfilename + ".")
+        if itemSources[key] == NORMAL_RAID_SOURCE:
+            escaped_key = escape_csv_field(key)
+            escaped_itemBosses = escape_csv_field(itemBosses[key])
+            normalRaidOutput.write(escaped_itemBosses + "," + escaped_key + ",")
+            
+            for choice in item_Choices[key]:
+                normalRaidOutput.write(f"{choice.player.name}, {choice.item_val}, {choice.next_best_val}, {choice.candidate_reason},")
+            normalRaidOutput.write("\n")
+
+    print(f"Output written to {outfilename}, {mythicRaidFilename}, {heroicRaidFilename}, and {normalRaidFilename}.")
     print("Press Enter to exit.")
     input()
 
@@ -668,7 +854,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
 
 
