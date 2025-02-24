@@ -569,29 +569,38 @@ def add_if_bis(item: str, source: str, choices, reason: str):
                 
                 if source == NORMAL_RAID_SOURCE:
                     if player.normal_delta_matrix[item] == 0:
+                        item_val = player.sims[item]
+                        next_best = find_next_best(player, item, source)
+                        next_best_delta = item_val - next_best
                         choices.append(ItemCandidate(
                             player,
-                            player.sims[item],
-                            player.normal_delta_matrix[item],
-                            find_next_best(player, item, source),
+                            item_val,
+                            next_best_delta,
+                            next_best,
                             reason))
                         
                 if source == HEROIC_RAID_SOURCE:
                     if player.heroic_delta_matrix[item] == 0:
+                        item_val = player.sims[item]
+                        next_best = find_next_best(player, item, source)
+                        next_best_delta = item_val - next_best
                         choices.append(ItemCandidate(
                             player,
-                            player.sims[item],
-                            player.heroic_delta_matrix[item],
-                            find_next_best(player, item, source),
+                            item_val,
+                            next_best_delta,
+                            next_best,
                             reason))
                         
                 if source == MYTHIC_RAID_SOURCE:
                     if player.mythic_delta_matrix[item] == 0:
+                        item_val = player.sims[item]
+                        next_best = find_next_best(player, item, source)
+                        next_best_delta = item_val - next_best
                         choices.append(ItemCandidate(
                             player,
-                            player.sims[item],
-                            player.mythic_delta_matrix[item],
-                            find_next_best(player, item, source),
+                            item_val,
+                            next_best_delta,
+                            next_best,
                             reason))
 
 def add_if_upgrade(item:str, source:str, choices, reason: str):
@@ -599,27 +608,36 @@ def add_if_upgrade(item:str, source:str, choices, reason: str):
             if item in player.sims and player.sims[item] > 0:
                 
                 if source == NORMAL_RAID_SOURCE:
+                    item_val = player.sims[item]
+                    next_best = find_next_best(player, item, source)
+                    next_best_delta = item_val - next_best
                     choices.append(ItemCandidate(
                         player,
-                        player.sims[item],
-                        player.normal_delta_matrix[item],
-                        find_next_best(player, item, source),
+                        item_val,
+                        next_best_delta,
+                        next_best,
                         reason))
                         
                 if source == HEROIC_RAID_SOURCE:
+                    item_val = player.sims[item]
+                    next_best = find_next_best(player, item, source)
+                    next_best_delta = item_val - next_best
                     choices.append(ItemCandidate(
                         player,
-                        player.sims[item],
-                        player.heroic_delta_matrix[item],
-                        find_next_best(player, item, source),
+                        item_val,
+                        next_best_delta,
+                        next_best,
                         reason))
                         
                 if source == MYTHIC_RAID_SOURCE:
+                    item_val = player.sims[item]
+                    next_best = find_next_best(player, item, source)
+                    next_best_delta = item_val - next_best
                     choices.append(ItemCandidate(
                         player,
-                        player.sims[item],
-                        player.mythic_delta_matrix[item],
-                        find_next_best(player, item, source),
+                        item_val,
+                        next_best_delta,
+                        next_best,
                         reason))
 
 def create_choices():
@@ -632,7 +650,7 @@ def create_choices():
         add_if_bis(item, source, choices, BIS_REASON)
         
         if len(choices) > 4:
-            choices.sort(key=lambda x: x.next_best_val, reverse=True)
+            choices.sort(key=lambda x: x.item_delta, reverse=True)
             choices = choices[:5] 
             item_Choices[item] = choices
             continue
@@ -640,9 +658,9 @@ def create_choices():
         non_bis_choices = []
         add_if_upgrade(item, source, non_bis_choices, UPGRADE_PCT_REASON)
         if len(non_bis_choices) > 0:
-            non_bis_choices.sort(key=lambda x: (x.item_val, x.next_best_val,), reverse=True)
+            non_bis_choices.sort(key=lambda x: (x.item_val, x.item_delta), reverse=True)
             
-        choices.sort(key=lambda x: x.next_best_val, reverse=True)
+        choices.sort(key=lambda x: x.item_delta, reverse=True)
         choices.extend(non_bis_choices)
         choices = choices[:5]
         item_Choices[item] = choices
