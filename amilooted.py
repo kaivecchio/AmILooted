@@ -38,6 +38,7 @@ import time
 import datetime
 import json
 import re
+import traceback
 import utils.tier_names as tier_names
 from models.player import Player, ItemCandidate
 import xml.etree.ElementTree as ET
@@ -81,7 +82,8 @@ def tierfilter(itemname, key):
         #Get the slot from the last part of key.
         #Get the ilvl as the last token in item.
         ilvl = itemname.split()[-1]
-        piece = slot_to_piece(key.split("/")[-2])
+        slot = key.rstrip("/").split("/")[-1]
+        piece = slot_to_piece(slot)
         return "Tier " + piece + " " + ilvl
     return itemname
 
@@ -261,6 +263,9 @@ def grabraidbots(url):
     #Either way, get the character name from line 2.
     #But we can only get the specialization from input.txt if the simc addon
     #was used; if armory data was used, we have to dig into data.json.
+    if len(inputdata) < 2:
+        raise ValueError(f"input.txt is missing expected lines: {inputdata}")
+    
     charname = ""
     spec = ""
     if inputdata[1][0] == "#":
@@ -334,7 +339,9 @@ def grabraidbots(url):
         key = line.split("\"")[1]
         if tiercheck(itemname):
             itemname = tierfilter(itemname, key)
-            add_to_items(itemname)
+            add_to_items(itemname, itemslot)
+            add_to_item_sources(itemname, find_item_source(key))
+            add_to_item_bosses(itemname, find_item_boss(inputdata[i-1]))
         gearnames.update({line.split("\"")[1]:itemname})
     
     #XXX: TODO: Sanity-check the input.  Make sure people are simming on
@@ -479,6 +486,7 @@ def graburl(url):
         print("ERROR with URL:")
         print(url)
         print("An unexpected error occurred:", e)
+        traceback.print_exc()
 
 def calculate_delta(player: Player, itemName: str, incomingValue: float, slot: str, source: str):
     if source == NORMAL_RAID_SOURCE or source == DUNGEON_SOURCE:
