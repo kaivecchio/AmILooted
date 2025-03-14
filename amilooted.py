@@ -117,6 +117,9 @@ NORMAL_RAID_SOURCE = "Normal Raid"
 HEROIC_RAID_SOURCE = "Heroic Raid"
 MYTHIC_RAID_SOURCE = "Mythic Raid"
 DUNGEON_SOURCE = "Mythic +10 Vault"
+DUNGEON_DROP_SOURCE = "Mythic+ Dungeon Drop"
+DELVES_SOURCE = "Delves"
+CRAFTED_SOURCE = "Crafted Item"
 BIS_REASON = "Best in slot"
 UPGRADE_PCT_REASON = "Upgrade percent"
 
@@ -133,7 +136,10 @@ qeSourcesLookup = {
     "Raid 3": NORMAL_RAID_SOURCE,
     "Raid 5": HEROIC_RAID_SOURCE,
     "Raid 7": MYTHIC_RAID_SOURCE,
-    "Dungeon 10": DUNGEON_SOURCE
+    "Dungeon 10": DUNGEON_SOURCE,
+    "Dungeon 6": DUNGEON_DROP_SOURCE,
+    "Crafted ": CRAFTED_SOURCE,
+    "Delves ": DELVES_SOURCE
 }
 
 def find_item_source(inputString):
@@ -565,7 +571,7 @@ def find_next_best(player: Player, item: str, source: str):
     slot = items[item]
     for key in player.sims:
         thisSource = itemSources[key]
-        if thisSource != DUNGEON_SOURCE and thisSource != source:
+        if thisSource != DUNGEON_SOURCE and thisSource != CRAFTED_SOURCE and thisSource != DELVES_SOURCE and thisSource != source:
             continue
         if items[key] != slot or key == item:
             continue
@@ -575,6 +581,7 @@ def find_next_best(player: Player, item: str, source: str):
         if player.sims[key] > next_best:
             next_best = player.sims[key]
     return next_best
+
 
 def populate_bis_lists():
     for player in players:
