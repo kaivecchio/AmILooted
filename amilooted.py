@@ -41,6 +41,7 @@ import re
 import traceback
 import utils.tier_names as tier_names
 from models.player import Player, ItemCandidate
+from collections import defaultdict
 import xml.etree.ElementTree as ET
 try:
     import requests
@@ -712,8 +713,51 @@ def create_choices():
                         0,
                         0,
                         "No candidate"))
-        
 
+def nested_dict():
+    return defaultdict(nested_dict)
+
+def does_source_boss_match_exist(source, boss):
+    for itemSource in itemSources.keys():
+        if itemSources[itemSource] == source:
+            for itemBoss in itemBosses.keys():
+                if itemBosses[itemBoss] == boss:
+                    if itemSource == itemBoss:
+                        return True
+    return False
+
+def create_ev_dictionary():
+    ev_dict = nested_dict()
+    
+    for source in sourcesLookup.values():
+        for boss in bossesList:
+            if does_source_boss_match_exist(source, boss):
+                for player in players:
+                    total_count = 0
+                    non_negative_sum = 0
+                    for item in player.sims.keys():
+                        if itemSources[item] == source and itemBosses[item] == boss:
+                            total_count += 1
+                            if player.sims[item] > 0:
+                                non_negative_sum += player.sims[item]
+                    ev_dict[source][boss][player.name] = non_negative_sum / total_count if total_count > 0 else 0
+    return add_average_to_ev_dictionary(ev_dict)
+
+def add_average_to_ev_dictionary(ev_dict: defaultdict):
+    for source in ev_dict.keys():
+        for boss in ev_dict[source].keys():
+            total_count = 0
+            non_negative_sum = 0
+            for player_name, value in ev_dict[source][boss].items():
+                total_count += 1
+                if value > 0:
+                    non_negative_sum += value
+            if total_count > 0:
+                average_value = non_negative_sum / total_count if total_count > 0 else 0
+                ev_dict[source][boss]["Average"] = average_value
+            else: 
+                ev_dict[source][boss]["Average"] = 0
+    return ev_dict
 
 def main():
     #Ugly hack for stupid operating systems:
@@ -768,6 +812,7 @@ def main():
     populate_bis_lists()
     build_delta_matrices()
     create_choices()
+    ev_dictionary = create_ev_dictionary()
     
     #Sort players alphabetically, and by role.  Tanks first, then DPS, then
     #healers.
@@ -799,8 +844,16 @@ def main():
                   
     normalRaidOutput = open(normalRaidFilename,"w")
     
+    
+    evFileName = "ev_sheet-"+ \
+                  datetime.datetime.fromtimestamp( \
+                  time.time()).strftime("%d-%m-%Y") + ".csv"
+    
+    evOutput = open(evFileName,"w")
+    
     #Print headers for item, slot, and sources columns
     output.write("Item Name" + "," + "Slot" + "," + "Source" + "," + "Boss")
+    evOutput.write("Source" + "," + "Boss")
     
     choicesFileHeaders = [
         "Boss",
@@ -834,6 +887,7 @@ def main():
         normalRaidOutput.write(header)
         normalRaidOutput.write(",")
 
+    evOutput.write(",Average")
     #First, one row with the player names and an initial blank entry.
     #If someone only submitted sims for one spec, no need to specify specs
     #on this line.
@@ -842,10 +896,13 @@ def main():
     for p in players:
         if p.multispec:
             output.write(","+p.name+" ("+p.spec+")")
+            evOutput.write(","+p.name+" ("+p.spec+")")
         else:
             output.write(","+p.name)
+            evOutput.write(","+p.name)
 
     output.write("\n")
+    evOutput.write("\n")
     mythicRaidOutput.write("\n")
     heroicRaidOutput.write("\n")
     normalRaidOutput.write("\n")
@@ -895,8 +952,19 @@ def main():
             for choice in item_Choices[key]:
                 normalRaidOutput.write(f"{choice.player.name}, {choice.candidate_reason}, {choice.item_val}, {choice.next_best_val}, ")
             normalRaidOutput.write("\n")
+    
+    for source in ev_dictionary.keys():
+        for boss in ev_dictionary[source].keys():
+            evOutput.write(escape_csv_field(source) + "," + escape_csv_field(boss))
+            evOutput.write("," + str(ev_dictionary[source][boss]["Average"]))
+            for player in players:
+                if player.name in ev_dictionary[source][boss]:
+                    evOutput.write("," + escape_csv_field(str(ev_dictionary[source][boss][player.name])))
+                else:
+                    evOutput.write(",")
+            evOutput.write("\n")
 
-    print(f"Output written to {outfilename}, {mythicRaidFilename}, {heroicRaidFilename}, and {normalRaidFilename}.")
+    print(f"Output written to {outfilename}, {mythicRaidFilename}, {heroicRaidFilename}, {normalRaidFilename}, and {evFileName}.")
     print("Press Enter to exit.")
     input()
 
@@ -912,6 +980,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
