@@ -740,7 +740,7 @@ def create_ev_dictionary():
                             total_count += 1
                             if player.sims[item] > 0:
                                 non_negative_sum += player.sims[item]
-                    ev_dict[source][boss][player.name] = non_negative_sum / total_count if total_count > 0 else 0
+                    ev_dict[source][boss][player.name] = round(non_negative_sum / total_count if total_count > 0 else 0, 3)
     return add_average_to_ev_dictionary(ev_dict)
 
 def add_average_to_ev_dictionary(ev_dict: defaultdict):
@@ -754,7 +754,7 @@ def add_average_to_ev_dictionary(ev_dict: defaultdict):
                     non_negative_sum += value
             if total_count > 0:
                 average_value = non_negative_sum / total_count if total_count > 0 else 0
-                ev_dict[source][boss]["Average"] = average_value
+                ev_dict[source][boss]["Average"] = round(average_value, 3)
             else: 
                 ev_dict[source][boss]["Average"] = 0
     return ev_dict
@@ -853,7 +853,7 @@ def main():
     
     #Print headers for item, slot, and sources columns
     output.write("Item Name" + "," + "Slot" + "," + "Source" + "," + "Boss")
-    evOutput.write("Source" + "," + "Boss")
+    evOutput.write("Source" + "," + "Boss" + "," + "Player" + "," + "EV")
     
     choicesFileHeaders = [
         "Boss",
@@ -887,7 +887,6 @@ def main():
         normalRaidOutput.write(header)
         normalRaidOutput.write(",")
 
-    evOutput.write(",Average")
     #First, one row with the player names and an initial blank entry.
     #If someone only submitted sims for one spec, no need to specify specs
     #on this line.
@@ -896,10 +895,8 @@ def main():
     for p in players:
         if p.multispec:
             output.write(","+p.name+" ("+p.spec+")")
-            evOutput.write(","+p.name+" ("+p.spec+")")
         else:
             output.write(","+p.name)
-            evOutput.write(","+p.name)
 
     output.write("\n")
     evOutput.write("\n")
@@ -956,13 +953,18 @@ def main():
     for source in ev_dictionary.keys():
         for boss in ev_dictionary[source].keys():
             evOutput.write(escape_csv_field(source) + "," + escape_csv_field(boss))
+            evOutput.write("," + "Average")
             evOutput.write("," + str(ev_dictionary[source][boss]["Average"]))
+            evOutput.write("\n")
             for player in players:
+                evOutput.write(escape_csv_field(source))
+                evOutput.write("," + escape_csv_field(boss))
+                evOutput.write("," + escape_csv_field(player.name))
                 if player.name in ev_dictionary[source][boss]:
                     evOutput.write("," + escape_csv_field(str(ev_dictionary[source][boss][player.name])))
                 else:
                     evOutput.write(",")
-            evOutput.write("\n")
+                evOutput.write("\n")
 
     print(f"Output written to {outfilename}, {mythicRaidFilename}, {heroicRaidFilename}, {normalRaidFilename}, and {evFileName}.")
     print("Press Enter to exit.")
