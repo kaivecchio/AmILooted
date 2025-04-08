@@ -356,7 +356,7 @@ def grabraidbots(url):
             add_to_items(itemname, itemslot)
             add_to_item_sources(itemname, find_item_source(key))
             add_to_item_bosses(itemname, find_item_boss(inputdata[i-1]))
-        gearnames.update({line.split("\"")[1]:itemname})
+        gearnames.update({line.split("\"")[1].removesuffix("swap_mh"):itemname})
     
     #XXX: TODO: Sanity-check the input.  Make sure people are simming on
     #Patchwerk instead of HecticAddCleave or DungeonSlice.
@@ -510,19 +510,19 @@ def graburl(url):
         traceback.print_exc()
 
 def calculate_delta(player: Player, itemName: str, incomingValue: float, slot: str, source: str):
-    if source == NORMAL_RAID_SOURCE or source == DUNGEON_SOURCE:
+    if source == NORMAL_RAID_SOURCE or source == DUNGEON_SOURCE or source == CRAFTED_SOURCE:
         bis_item = player.normal_bis.get_bis(slot)
         bis_value = player.sims[bis_item]
         delta_value = incomingValue - bis_value
         player.normal_delta_matrix[itemName] = delta_value
     
-    if source == HEROIC_RAID_SOURCE or source == DUNGEON_SOURCE:
+    if source == HEROIC_RAID_SOURCE or source == DUNGEON_SOURCE or source == CRAFTED_SOURCE:
         bis_item = player.heroic_bis.get_bis(slot)
         bis_value = player.sims[bis_item]
         delta_value = incomingValue - bis_value
         player.heroic_delta_matrix[itemName] = delta_value
         
-    if source == MYTHIC_RAID_SOURCE or source == DUNGEON_SOURCE:
+    if source == MYTHIC_RAID_SOURCE or source == DUNGEON_SOURCE or source == CRAFTED_SOURCE:
         bis_item = player.mythic_bis.get_bis(slot)
         bis_value = player.sims[bis_item]
         delta_value = incomingValue - bis_value
@@ -581,7 +581,7 @@ def find_next_best(player: Player, item: str, source: str):
             continue
         if player.sims[key] > next_best:
             next_best = player.sims[key]
-    return next_best
+    return next_best if next_best is not None else 0
 
 
 def populate_bis_lists():
@@ -602,36 +602,39 @@ def add_if_bis(item: str, source: str, choices, reason: str):
                         item_val = player.sims[item]
                         next_best = find_next_best(player, item, source)
                         next_best_delta = item_val - next_best
-                        choices.append(ItemCandidate(
-                            player,
-                            item_val,
-                            next_best_delta,
-                            next_best,
-                            reason))
+                        if item_val > next_best:
+                            choices.append(ItemCandidate(
+                                player,
+                                item_val,
+                                next_best_delta,
+                                next_best,
+                                reason))
                         
                 if source == HEROIC_RAID_SOURCE:
                     if player.heroic_delta_matrix[item] == 0:
                         item_val = player.sims[item]
                         next_best = find_next_best(player, item, source)
                         next_best_delta = item_val - next_best
-                        choices.append(ItemCandidate(
-                            player,
-                            item_val,
-                            next_best_delta,
-                            next_best,
-                            reason))
+                        if item_val > next_best:
+                            choices.append(ItemCandidate(
+                                player,
+                                item_val,
+                                next_best_delta,
+                                next_best,
+                                reason))
                         
                 if source == MYTHIC_RAID_SOURCE:
                     if player.mythic_delta_matrix[item] == 0:
                         item_val = player.sims[item]
                         next_best = find_next_best(player, item, source)
                         next_best_delta = item_val - next_best
-                        choices.append(ItemCandidate(
-                            player,
-                            item_val,
-                            next_best_delta,
-                            next_best,
-                            reason))
+                        if item_val > next_best:
+                            choices.append(ItemCandidate(
+                                player,
+                                item_val,
+                                next_best_delta,
+                                next_best,
+                                reason))
 
 def add_if_upgrade(item:str, source:str, choices, reason: str):
     for player in players:
@@ -684,7 +687,7 @@ def create_choices():
     no_choice_player = Player("No choice", None, None)
     for item in sorted(items.keys()):
         source = itemSources[item]
-        if source == DUNGEON_SOURCE:
+        if source == DUNGEON_SOURCE or source == CRAFTED_SOURCE or source == DELVES_SOURCE:
             continue
         choices = []
         add_if_bis(item, source, choices, BIS_REASON)
