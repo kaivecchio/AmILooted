@@ -50,7 +50,59 @@ except:
     subprocess.call([sys.executable, "-m", "pip", "install", "requests"])
     print("Requests should be installed; this should only happen once.")
     import requests
+import os.path
+from googleapiclient.discovery import build
+from google.oauth2 import service_account
 
+
+SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+SERVICE_ACCOUNT_FILE = 'credentials.json'  # Or your service account file
+
+def get_sheets_service():
+    creds = service_account.Credentials.from_service_account_file(
+        SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+    service = build('sheets', 'v4', credentials=creds)
+    return service
+
+def write_to_sheet(service, spreadsheet_id, sheet_name, values):
+    body = {
+        'values': values
+    }
+    range_name = f"{sheet_name}!A1"
+    service.spreadsheets().values().update(
+        spreadsheetId=spreadsheet_id, range=range_name,
+        valueInputOption="RAW", body=body).execute()
+
+def clear_sheet(service, spreadsheet_id, sheet_name):
+    # Get the sheet ID from the sheet name
+    spreadsheet = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    sheet_id = None
+    for s in spreadsheet['sheets']:
+        if s['properties']['title'] == sheet_name:
+            sheet_id = s['properties']['sheetId']
+            break
+    if sheet_id is None:
+        raise ValueError(f"Sheet '{sheet_name}' not found.")
+
+    # Clear values
+    service.spreadsheets().values().clear(
+        spreadsheetId=spreadsheet_id,
+        range=f"{sheet_name}"
+    ).execute()
+
+    # Clear formatting and filters
+    requests_body = [
+        {"updateCells": {
+            "range": {"sheetId": sheet_id},
+            "fields": "userEnteredFormat"
+        }},
+        {"clearBasicFilter": {"sheetId": sheet_id}}
+    ]
+    service.spreadsheets().batchUpdate(
+        spreadsheetId=spreadsheet_id,
+        body={"requests": requests_body}
+    ).execute()
+    
 tiernames = tier_names.tiernames
 
 #A dictionary that turns slot name into an appropriate gear name.
@@ -147,7 +199,7 @@ def find_item_source(inputString):
     for substring, mapped in sourcesLookup.items():
         if substring in inputString:
             return mapped
-    print("Item source not found, inputString:" + inputString)
+   
 
 def add_to_item_sources(itemname, itemSource):
     if itemname in itemSources:
@@ -539,7 +591,7 @@ def build_delta_matrices():
 
 def check_and_add_bis(player: Player, itemName: str, incomingValue: float, slot: str, source: str):
     #If item is from normal or dungeon, then check and add bis
-    if source == NORMAL_RAID_SOURCE or source == DUNGEON_SOURCE:
+    if source == NORMAL_RAID_SOURCE or source == DUNGEON_SOURCE or source == CRAFTED_SOURCE:
         if player.normal_bis.get_bis(slot) is None: 
             player.normal_bis.set_bis(slot, itemName)
         else:   
@@ -548,7 +600,7 @@ def check_and_add_bis(player: Player, itemName: str, incomingValue: float, slot:
                 player.normal_bis.set_bis(slot, itemName)
 
     #If item is from normal or dungeon, then check and add bis
-    if source == HEROIC_RAID_SOURCE or source == DUNGEON_SOURCE:
+    if source == HEROIC_RAID_SOURCE or source == DUNGEON_SOURCE or source == CRAFTED_SOURCE:
         if player.heroic_bis.get_bis(slot) is None: 
             player.heroic_bis.set_bis(slot, itemName)
         else:    
@@ -557,7 +609,7 @@ def check_and_add_bis(player: Player, itemName: str, incomingValue: float, slot:
                 player.heroic_bis.set_bis(slot, itemName)
     
     #If item is from normal or dungeon, then check and add bis
-    if source == MYTHIC_RAID_SOURCE or source == DUNGEON_SOURCE:
+    if source == MYTHIC_RAID_SOURCE or source == DUNGEON_SOURCE or source == CRAFTED_SOURCE:
         if player.mythic_bis.get_bis(slot) is None: 
             player.mythic_bis.set_bis(slot, itemName)
         else:    
@@ -859,129 +911,120 @@ def main():
     evOutput.write("Source" + "," + "Boss" + "," + "Player" + "," + "EV")
     
     choicesFileHeaders = [
-        "Boss",
-        "Item Name",
-        "Choice 1",
-        "Choice 1 Reason",
-        "Choice 1 % Upgrade",
-        "Next Best Alternative",
-        "Choice 2",
-        "Choice 2 Reason",
-        "Choice 2 % Upgrade",
-        "Next Best Alternative",
-        "Choice 3",
-        "Choice 3 Reason",
-        "Choice 3 % Upgrade",
-        "Next Best Alternative", 
-        "Choice 4",
-        "Choice 4 Reason",
-        "Choice 4 % Upgrade",
-        "Next Best Alternative",
-        "Choice 5",
-        "Choice 5 Reason",
-        "Choice 5 % Upgrade",
-        "Next Best Alternative",
+        "Boss", "Item Name",
+        "Choice 1", "Choice 1 Reason", "Choice 1 % Upgrade", "Next Best Alternative",
+        "Choice 2", "Choice 2 Reason", "Choice 2 % Upgrade", "Next Best Alternative",
+        "Choice 3", "Choice 3 Reason", "Choice 3 % Upgrade", "Next Best Alternative",
+        "Choice 4", "Choice 4 Reason", "Choice 4 % Upgrade", "Next Best Alternative",
+        "Choice 5", "Choice 5 Reason", "Choice 5 % Upgrade", "Next Best Alternative",
     ]
-    for header in choicesFileHeaders:
-        mythicRaidOutput.write(header)
-        mythicRaidOutput.write(",")
-        heroicRaidOutput.write(header)
-        heroicRaidOutput.write(",")
-        normalRaidOutput.write(header)
-        normalRaidOutput.write(",")
+    mythicRaidOutput.write(",".join(choicesFileHeaders) + "\n")
+    heroicRaidOutput.write(",".join(choicesFileHeaders) + "\n")
+    normalRaidOutput.write(",".join(choicesFileHeaders) + "\n")
 
-    #First, one row with the player names and an initial blank entry.
-    #If someone only submitted sims for one spec, no need to specify specs
-    #on this line.
-    #If they submitted sims for several specs (e.g., both Arcane and Frost
-    #Mage), then we have separate columns for the specs and we should name them.
-    for p in players:
-        if p.multispec:
-            output.write(","+p.name+" ("+p.spec+")")
-        else:
-            output.write(","+p.name)
+    #Instead of opening files, collect rows:
+    output_rows = []
+    mythicRaid_rows = []
+    heroicRaid_rows = []
+    normalRaid_rows = []
+    ev_rows = []
 
-    output.write("\n")
-    evOutput.write("\n")
-    mythicRaidOutput.write("\n")
-    heroicRaidOutput.write("\n")
-    normalRaidOutput.write("\n")
+    #Prepare headers as before, but as lists:
+    output_rows.append(["Item Name", "Slot", "Source", "Boss"] + [p.name + (f" ({p.spec})" if p.multispec else "") for p in players])
+    choicesFileHeaders = [
+        "Boss", "Item Name",
+        "Choice 1", "Choice 1 Reason", "Choice 1 % Upgrade", "Next Best Alternative",
+        "Choice 2", "Choice 2 Reason", "Choice 2 % Upgrade", "Next Best Alternative",
+        "Choice 3", "Choice 3 Reason", "Choice 3 % Upgrade", "Next Best Alternative",
+        "Choice 4", "Choice 4 Reason", "Choice 4 % Upgrade", "Next Best Alternative",
+        "Choice 5", "Choice 5 Reason", "Choice 5 % Upgrade", "Next Best Alternative",
+    ]
+    mythicRaid_rows.append(choicesFileHeaders)
+    heroicRaid_rows.append(choicesFileHeaders)
+    normalRaid_rows.append(choicesFileHeaders)
 
-    #Then, for each item, a row with that item's name and the appropriate sim.
 
     for key in sorted(items.keys()):
-        # Prepare the key field: if it contains a comma, enclose it in double quotes.
-        escaped_key = escape_csv_field(key)
-        escaped_item = escape_csv_field(items[key])
-        escaped_itemSource = escape_csv_field(itemSources[key])
-        escaped_itemBosses = escape_csv_field(itemBosses[key])
-        #Write the item, slot, and source into their columns, deliminated by a comma
-        output.write(escaped_key + "," + escaped_item + "," + escaped_itemSource + "," + escaped_itemBosses)
-        
+        row = [
+            key,
+            items[key],
+            itemSources.get(key, ""),
+            itemBosses.get(key, "")
+        ]
         for p in players:
-            if key in p.sims:
-                output.write("," + str(p.sims[key]))
-            else:
-                output.write(",")
-        output.write("\n")
-    
-    for key in sorted(item_Choices.keys()):
-        if itemSources[key] == MYTHIC_RAID_SOURCE:
-            escaped_key = escape_csv_field(key)
-            escaped_itemBosses = escape_csv_field(itemBosses[key])
-            mythicRaidOutput.write(escaped_itemBosses + "," + escaped_key + ",")
-            
-            for choice in item_Choices[key]:
-                mythicRaidOutput.write(f"{choice.player.name}, {choice.candidate_reason}, {choice.item_val}, {choice.next_best_val},")
-            mythicRaidOutput.write("\n")
-        
-        if itemSources[key] == HEROIC_RAID_SOURCE:
-            escaped_key = escape_csv_field(key)
-            escaped_itemBosses = escape_csv_field(itemBosses[key])
-            heroicRaidOutput.write(escaped_itemBosses + "," + escaped_key + ",")
-            
-            for choice in item_Choices[key]:
-                heroicRaidOutput.write(f"{choice.player.name}, {choice.candidate_reason}, {choice.item_val}, {choice.next_best_val}, ")
-            heroicRaidOutput.write("\n")
+            row.append(str(p.sims.get(key, "")))
+        output_rows.append(row)
 
-        if itemSources[key] == NORMAL_RAID_SOURCE:
-            escaped_key = escape_csv_field(key)
-            escaped_itemBosses = escape_csv_field(itemBosses[key])
-            normalRaidOutput.write(escaped_itemBosses + "," + escaped_key + ",")
-            
-            for choice in item_Choices[key]:
-                normalRaidOutput.write(f"{choice.player.name}, {choice.candidate_reason}, {choice.item_val}, {choice.next_best_val}, ")
-            normalRaidOutput.write("\n")
-    
-    for source in ev_dictionary.keys():
-        for boss in ev_dictionary[source].keys():
-            evOutput.write(escape_csv_field(source) + "," + escape_csv_field(boss))
-            evOutput.write("," + "Average")
-            evOutput.write("," + str(ev_dictionary[source][boss]["Average"]))
-            evOutput.write("\n")
-            for player in players:
-                evOutput.write(escape_csv_field(source))
-                evOutput.write("," + escape_csv_field(boss))
-                evOutput.write("," + escape_csv_field(player.name))
-                if player.name in ev_dictionary[source][boss]:
-                    evOutput.write("," + escape_csv_field(str(ev_dictionary[source][boss][player.name])))
-                else:
-                    evOutput.write(",")
-                evOutput.write("\n")
 
-    print(f"Output written to {outfilename}, {mythicRaidFilename}, {heroicRaidFilename}, {normalRaidFilename}, and {evFileName}.")
+    for item in sorted(items.keys()):
+        boss = itemBosses.get(item, "")
+        item_source = itemSources.get(item, "")
+        choices = item_Choices.get(item, [])
+        # Build the row for each difficulty
+        if item_source == MYTHIC_RAID_SOURCE:
+            row = [boss, item]
+            for c in choices:
+                row.extend([
+                    getattr(c.player, "name", ""),
+                    c.candidate_reason,
+                    c.item_val,
+                    c.next_best_val
+                ])
+            # Pad to 5 choices if needed
+            while len(row) < 22:
+                row.extend(["", "", "", ""])
+            mythicRaid_rows.append(row)
+        elif item_source == HEROIC_RAID_SOURCE:
+            row = [boss, item]
+            for c in choices:
+                row.extend([
+                    getattr(c.player, "name", ""),
+                    c.candidate_reason,
+                    c.item_val,
+                    c.next_best_val
+                ])
+            while len(row) < 22:
+                row.extend(["", "", "", ""])
+            heroicRaid_rows.append(row)
+        elif item_source == NORMAL_RAID_SOURCE:
+            row = [boss, item]
+            for c in choices:
+                row.extend([
+                    getattr(c.player, "name", ""),
+                    c.candidate_reason,
+                    c.item_val,
+                    c.next_best_val
+                ])
+            while len(row) < 22:
+                row.extend(["", "", "", ""])
+            normalRaid_rows.append(row)
+
+    # EV Sheet
+    for source in ev_dictionary:
+        for boss in ev_dictionary[source]:
+            for player in ev_dictionary[source][boss]:
+                ev_rows.append([source, boss, player, ev_dictionary[source][boss][player]])
+
+    #Write to Google Sheets
+    service = get_sheets_service()
+    SPREADSHEET_ID = '1h7UeLR_XygsUpc1-bFN9wCOFAa5-on43JSZ47XJhO4o'  # Replace with your Google Sheet ID
+
+    # Clear each sheet before writing
+    clear_sheet(service, SPREADSHEET_ID, 'amilooted.py')
+    clear_sheet(service, SPREADSHEET_ID, 'Mythic Raid Choices')
+    clear_sheet(service, SPREADSHEET_ID, 'Heroic Raid Choices')
+    clear_sheet(service, SPREADSHEET_ID, 'Normal Raid Choices')
+    clear_sheet(service, SPREADSHEET_ID, 'Expected Values')
+
+    write_to_sheet(service, SPREADSHEET_ID, 'amilooted.py', output_rows)
+    write_to_sheet(service, SPREADSHEET_ID, 'Mythic Raid Choices', mythicRaid_rows)
+    write_to_sheet(service, SPREADSHEET_ID, 'Heroic Raid Choices', heroicRaid_rows)
+    write_to_sheet(service, SPREADSHEET_ID, 'Normal Raid Choices', normalRaid_rows)
+    write_to_sheet(service, SPREADSHEET_ID, 'Expected Values', ev_rows)
+
+    print(f"Output written to Google Sheets workbook: {SPREADSHEET_ID}")
     print("Press Enter to exit.")
     input()
-
-
-
-
-
-
-
-
-
-
 
 if __name__ == "__main__":
     main()
