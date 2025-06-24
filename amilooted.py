@@ -39,9 +39,12 @@ import datetime
 import json
 import re
 import traceback
-import utils.tier_names as tier_names
 from models.player import Player, ItemCandidate
 from collections import defaultdict
+from utils.constants import *
+from utils.item_utils import *
+from utils.player_utils import players, add_player, rolekey
+from utils.io_utils import *
 import xml.etree.ElementTree as ET
 try:
     import requests
@@ -50,113 +53,6 @@ except:
     subprocess.call([sys.executable, "-m", "pip", "install", "requests"])
     print("Requests should be installed; this should only happen once.")
     import requests
-import os.path
-from googleapiclient.discovery import build
-from google.oauth2 import service_account
-
-
-SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
-SERVICE_ACCOUNT_FILE = 'credentials.json'  # Or your service account file
-
-def get_sheets_service():
-    creds = service_account.Credentials.from_service_account_file(
-        SERVICE_ACCOUNT_FILE, scopes=SCOPES)
-    service = build('sheets', 'v4', credentials=creds)
-    return service
-
-def write_to_sheet(service, spreadsheet_id, sheet_name, values):
-    body = {
-        'values': values
-    }
-    range_name = f"{sheet_name}!A1"
-    service.spreadsheets().values().update(
-        spreadsheetId=spreadsheet_id, range=range_name,
-        valueInputOption="RAW", body=body).execute()
-
-def clear_sheet(service, spreadsheet_id, sheet_name):
-    # Get the sheet ID from the sheet name
-    spreadsheet = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
-    sheet_id = None
-    for s in spreadsheet['sheets']:
-        if s['properties']['title'] == sheet_name:
-            sheet_id = s['properties']['sheetId']
-            break
-    if sheet_id is None:
-        raise ValueError(f"Sheet '{sheet_name}' not found.")
-
-    # Clear values
-    service.spreadsheets().values().clear(
-        spreadsheetId=spreadsheet_id,
-        range=f"{sheet_name}"
-    ).execute()
-
-    # Clear formatting and filters
-    requests_body = [
-        {"updateCells": {
-            "range": {"sheetId": sheet_id},
-            "fields": "userEnteredFormat"
-        }},
-        {"clearBasicFilter": {"sheetId": sheet_id}}
-    ]
-    service.spreadsheets().batchUpdate(
-        spreadsheetId=spreadsheet_id,
-        body={"requests": requests_body}
-    ).execute()
-    
-tiernames = tier_names.tiernames
-
-#A dictionary that turns slot name into an appropriate gear name.
-#Used to build strings like "Tier Helmet".
-slotdict = {"head":"Helmet",
-            "shoulder":"Pauldrons",
-            "waist":"Belt",
-            "wrist":"Bracers",
-            "hands":"Gloves",
-            "back":"Cloak",
-            "legs":"Pants",
-            "feet":"Boots",
-            "chest":"Chest"}
-
-def can_be_float(value):
-    try:
-        float(value)
-        return True
-    except ValueError:
-        return False
-
-def slot_to_piece(slot):
-    return slotdict[slot]
-
-
-def tiercheck(itemname):
-    for t in tiernames:
-        if t in itemname:
-            return True
-    return False
-    
-    
-#To avoid adding a mess of disparate tier sets, condense all such things
-#into, e.g., "Tier Helm 441"
-def tierfilter(itemname, key):
-    if tiercheck(itemname):
-        #Get the slot from the last part of key.
-        #Get the ilvl as the last token in item.
-        ilvl = itemname.split()[-1]
-        slot = key.rstrip("/").split("/")[-1]
-        piece = slot_to_piece(slot)
-        return "Tier " + piece + " " + ilvl
-    return itemname
-
-
-#The QE/wowhead calls give us verbose details on where the item could go, we want to compare with the best use anyways so we standardize them.
-qeWeaponSlots = ["One-Hand", "Ranged", "Two-Hand"]
-def standardize_qe_item_slot(inputSlot):
-    if inputSlot in qeWeaponSlots:
-        return "main_hand"
-    if inputSlot == "Off Hand" or inputSlot == "Held In Off-hand":
-        return "off_hand"
-    return inputSlot
-
 
 #Dictionary of all the item names (key) being simmed in anyone's droptimizers and their item slots (value).
 items = {}
@@ -166,34 +62,9 @@ def add_to_items(itemname, itemSlot: str):
     items[itemname] = itemSlot.lower()
     
     
-NORMAL_RAID_SOURCE = "Normal Raid"
-HEROIC_RAID_SOURCE = "Heroic Raid"
-MYTHIC_RAID_SOURCE = "Mythic Raid"
-DUNGEON_SOURCE = "Mythic +10 Vault"
-DUNGEON_DROP_SOURCE = "Mythic+ Dungeon Drop"
-DELVES_SOURCE = "Delves"
-CRAFTED_SOURCE = "Crafted Item"
-BIS_REASON = "Best in slot"
-UPGRADE_PCT_REASON = "Upgrade percent"
 
 #Dictionary of all the item names (key) being simmed in anyone's droptimizers and their source (value).
 itemSources = {}
-sourcesLookup = { 
-                 "raid-normal": NORMAL_RAID_SOURCE,
-                 "raid-heroic": HEROIC_RAID_SOURCE,
-                 "raid-mythic": MYTHIC_RAID_SOURCE,
-                 "dungeon-mythic-weekly10": DUNGEON_SOURCE
-}
-
-qeSourcesLookup = {
-    "Raid 3": NORMAL_RAID_SOURCE,
-    "Raid 5": HEROIC_RAID_SOURCE,
-    "Raid 7": MYTHIC_RAID_SOURCE,
-    "Dungeon 10": DUNGEON_SOURCE,
-    "Dungeon 6": DUNGEON_DROP_SOURCE,
-    "Crafted ": CRAFTED_SOURCE,
-    "Delves ": DELVES_SOURCE
-}
 
 def find_item_source(inputString):
     for substring, mapped in sourcesLookup.items():
@@ -206,28 +77,6 @@ def add_to_item_sources(itemname, itemSource):
             return
     itemSources[itemname] = itemSource
     
-#Dictionary of all the item names (key) being simmed in anyone's droptimizers and the boss they drop from (value).
-itemBosses = {}
-bossesList = [
-    "Mythic+ Dungeons",
-    "Trash Drop",
-    "Ulgrax the Devourer",
-    "The Bloodbound Horror",
-    "Sikran, Captain of the Sureki",
-    "Rasha'nan",
-    "Broodtwister Ovi'nax",
-    "Nexus-Princess Ky'veza",
-    "The Silken Court",
-    "Queen Ansurek",
-    "Vexie and the Geargrinders",
-    "Cauldron of Carnage",
-    "Rik Reverb",
-    "Stix Bunkjunker",
-    "Sprocketmonger Lockenstock",
-    "The One-Armed Bandit",
-    "Mug'Zee, Heads of Security",
-    "Chrome King Gallywix"
-]
 
 def find_item_boss(inputString):
     for boss in bossesList:
@@ -257,58 +106,6 @@ def add_to_item_bosses(itemName, bossName):
     if itemName in itemBosses:
         return
     itemBosses[itemName] = bossName
-
-#List of players with droptimizers.
-players: list[Player] = []
-
-#Check to see if there's already a player by that name.  If not, we'll add
-#a new player object to the players list.  If yes, add this droptimizer data
-#to the existing player.
-#If someone submitted sims for multiple specs, treat the specs as different
-#players with the same name.
-def add_player(charname, spec):
-    pindex = -1
-    multispec = False
-    for i in range(len(players)):
-        if charname == players[i].name:
-            if spec == players[i].spec:
-                pindex = i
-                break
-            else:
-                players[i].multispec = True
-                multispec = True
-    
-    if pindex == -1:
-        players.append(Player(charname, spec, multispec))
-   
-    return pindex
-    
-#Key function used to sort the player list by role.
-def rolekey(p):
-    if p.spec == "Protection" or \
-       p.spec == "Blood" or \
-       p.spec == "Guardian" or \
-       p.spec == "Brewmaster" or \
-       p.spec == "Vengenace":
-        return 0
-    if p.spec == "Holy" or \
-       p.spec == "Restoration" or \
-       p.spec == "Discipline" or \
-       p.spec == "Mistweaver" or \
-       p.spec == "Healer" or \
-       p.spec == "Preservation":
-        return 2
-    return 1
-
-def escape_csv_field(field):
-    # First, escape any existing double quotes by doubling them
-    field = field.replace('"', '""')
-    
-    # If the field contains a comma, a double quote, or a newline,
-    # enclose it in double quotes.
-    if any(c in field for c in [',', '"', '\n']):
-        field = f'"{field}"'
-    return field
 
 def grabraidbots(url):
     #Add a trailing / if we didn't already have one
