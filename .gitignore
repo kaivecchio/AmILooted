@@ -82,3 +82,6 @@ DocumentLayout.json
 # ----------------------------------
 *.testlog
 testlog.manifest
+
+# Ignore Google Cloud credentials
+credentials.json
