@@ -38,8 +38,13 @@ import time
 import datetime
 import json
 import re
-import utils.tier_names as tier_names
+import traceback
 from models.player import Player, ItemCandidate
+from collections import defaultdict
+from utils.constants import *
+from utils.item_utils import *
+from utils.player_utils import players, add_player, rolekey
+from utils.io_utils import *
 import xml.etree.ElementTree as ET
 try:
     import requests
@@ -49,53 +54,6 @@ except:
     print("Requests should be installed; this should only happen once.")
     import requests
 
-tiernames = tier_names.tiernames
-
-#A dictionary that turns slot name into an appropriate gear name.
-#Used to build strings like "Tier Helmet".
-slotdict = {"head":"Helmet",
-            "shoulder":"Pauldrons",
-            "waist":"Belt",
-            "wrist":"Bracers",
-            "hands":"Gloves",
-            "back":"Cloak",
-            "legs":"Pants",
-            "feet":"Boots",
-            "chest":"Chest"}
-
-def slot_to_piece(slot):
-    return slotdict[slot]
-
-
-def tiercheck(itemname):
-    for t in tiernames:
-        if t in itemname:
-            return True
-    return False
-    
-    
-#To avoid adding a mess of disparate tier sets, condense all such things
-#into, e.g., "Tier Helm 441"
-def tierfilter(itemname, key):
-    if tiercheck(itemname):
-        #Get the slot from the last part of key.
-        #Get the ilvl as the last token in item.
-        ilvl = itemname.split()[-1]
-        piece = slot_to_piece(key.split("/")[-2])
-        return "Tier " + piece + " " + ilvl
-    return itemname
-
-
-#The QE/wowhead calls give us verbose details on where the item could go, we want to compare with the best use anyways so we standardize them.
-qeWeaponSlots = ["One-Hand", "Ranged", "Two-Hand"]
-def standardize_qe_item_slot(inputSlot):
-    if inputSlot in qeWeaponSlots:
-        return "main_hand"
-    if inputSlot == "Off Hand" or inputSlot == "Held In Off-hand":
-        return "off_hand"
-    return inputSlot
-
-
 #Dictionary of all the item names (key) being simmed in anyone's droptimizers and their item slots (value).
 items = {}
 def add_to_items(itemname, itemSlot: str):
@@ -104,62 +62,21 @@ def add_to_items(itemname, itemSlot: str):
     items[itemname] = itemSlot.lower()
     
     
-NORMAL_RAID_SOURCE = "Normal Raid"
-HEROIC_RAID_SOURCE = "Heroic Raid"
-MYTHIC_RAID_SOURCE = "Mythic Raid"
-DUNGEON_SOURCE = "Mythic +10 Vault"
-BIS_REASON = "Best in slot"
-UPGRADE_PCT_REASON = "Upgrade percent"
 
 #Dictionary of all the item names (key) being simmed in anyone's droptimizers and their source (value).
 itemSources = {}
-sourcesLookup = { 
-                 "raid-normal": NORMAL_RAID_SOURCE,
-                 "raid-heroic": HEROIC_RAID_SOURCE,
-                 "raid-mythic": MYTHIC_RAID_SOURCE,
-                 "dungeon-mythic-weekly10": DUNGEON_SOURCE
-}
-
-qeSourcesLookup = {
-    "Raid 3": NORMAL_RAID_SOURCE,
-    "Raid 5": HEROIC_RAID_SOURCE,
-    "Raid 7": MYTHIC_RAID_SOURCE,
-    "Dungeon 10": DUNGEON_SOURCE
-}
 
 def find_item_source(inputString):
     for substring, mapped in sourcesLookup.items():
         if substring in inputString:
             return mapped
-    print("Item source not found, inputString:" + inputString)
+   
 
 def add_to_item_sources(itemname, itemSource):
     if itemname in itemSources:
             return
     itemSources[itemname] = itemSource
     
-#Dictionary of all the item names (key) being simmed in anyone's droptimizers and the boss they drop from (value).
-itemBosses = {}
-bossesList = [
-    "Mythic+ Dungeons",
-    "Trash Drop",
-    "Ulgrax the Devourer",
-    "The Bloodbound Horror",
-    "Sikran, Captain of the Sureki",
-    "Rasha'nan",
-    "Broodtwister Ovi'nax",
-    "Nexus-Princess Ky'veza",
-    "The Silken Court",
-    "Queen Ansurek",
-    "Vexie and the Geargrinders",
-    "Cauldron of Carnage",
-    "Rik Reverb",
-    "Stix Bunkjunker",
-    "Sprocketmonger Lockenstock",
-    "The One-Armed Bandit",
-    "Mug'Zee, Heads of Security",
-    "Chrome King Gallywix"
-]
 
 def find_item_boss(inputString):
     for boss in bossesList:
@@ -190,58 +107,6 @@ def add_to_item_bosses(itemName, bossName):
         return
     itemBosses[itemName] = bossName
 
-#List of players with droptimizers.
-players: list[Player] = []
-
-#Check to see if there's already a player by that name.  If not, we'll add
-#a new player object to the players list.  If yes, add this droptimizer data
-#to the existing player.
-#If someone submitted sims for multiple specs, treat the specs as different
-#players with the same name.
-def add_player(charname, spec):
-    pindex = -1
-    multispec = False
-    for i in range(len(players)):
-        if charname == players[i].name:
-            if spec == players[i].spec:
-                pindex = i
-                break
-            else:
-                players[i].multispec = True
-                multispec = True
-    
-    if pindex == -1:
-        players.append(Player(charname, spec, multispec))
-   
-    return pindex
-    
-#Key function used to sort the player list by role.
-def rolekey(p):
-    if p.spec == "Protection" or \
-       p.spec == "Blood" or \
-       p.spec == "Guardian" or \
-       p.spec == "Brewmaster" or \
-       p.spec == "Vengenace":
-        return 0
-    if p.spec == "Holy" or \
-       p.spec == "Restoration" or \
-       p.spec == "Discipline" or \
-       p.spec == "Mistweaver" or \
-       p.spec == "Healer" or \
-       p.spec == "Preservation":
-        return 2
-    return 1
-
-def escape_csv_field(field):
-    # First, escape any existing double quotes by doubling them
-    field = field.replace('"', '""')
-    
-    # If the field contains a comma, a double quote, or a newline,
-    # enclose it in double quotes.
-    if any(c in field for c in [',', '"', '\n']):
-        field = f'"{field}"'
-    return field
-
 def grabraidbots(url):
     #Add a trailing / if we didn't already have one
     if not url[-1] == "/":
@@ -261,6 +126,9 @@ def grabraidbots(url):
     #Either way, get the character name from line 2.
     #But we can only get the specialization from input.txt if the simc addon
     #was used; if armory data was used, we have to dig into data.json.
+    if len(inputdata) < 2:
+        raise ValueError(f"input.txt is missing expected lines: {inputdata}")
+    
     charname = ""
     spec = ""
     if inputdata[1][0] == "#":
@@ -334,8 +202,10 @@ def grabraidbots(url):
         key = line.split("\"")[1]
         if tiercheck(itemname):
             itemname = tierfilter(itemname, key)
-            add_to_items(itemname)
-        gearnames.update({line.split("\"")[1]:itemname})
+            add_to_items(itemname, itemslot)
+            add_to_item_sources(itemname, find_item_source(key))
+            add_to_item_bosses(itemname, find_item_boss(inputdata[i-1]))
+        gearnames.update({line.split("\"")[1].removesuffix("swap_mh"):itemname})
     
     #XXX: TODO: Sanity-check the input.  Make sure people are simming on
     #Patchwerk instead of HecticAddCleave or DungeonSlice.
@@ -348,9 +218,16 @@ def grabraidbots(url):
     for line in outputdata[2:]:
         if line == "":
             continue
-        key = line.split(",")[0]
+        last_slash_index = line.rfind('/')
+        key = line[:last_slash_index] + "/" if last_slash_index != -1 else line
+        key = key.replace('"', '')
         item = gearnames[key]
-        newdps = float(line.split(",")[1])
+        
+        if can_be_float(line.split(",")[1]):
+            newdps = float(line.split(",")[1])
+        else:
+            newdps = float(line.split(",")[2])
+        
         percentupgrade = round(int(10000 * (newdps - baselinedps)/baselinedps) * 0.01, 3)
         if item in players[pindex].sims:
             #This means we already added the item to the player's sims at some
@@ -479,21 +356,22 @@ def graburl(url):
         print("ERROR with URL:")
         print(url)
         print("An unexpected error occurred:", e)
+        traceback.print_exc()
 
 def calculate_delta(player: Player, itemName: str, incomingValue: float, slot: str, source: str):
-    if source == NORMAL_RAID_SOURCE or source == DUNGEON_SOURCE:
+    if source == NORMAL_RAID_SOURCE or source == DUNGEON_SOURCE or source == CRAFTED_SOURCE:
         bis_item = player.normal_bis.get_bis(slot)
         bis_value = player.sims[bis_item]
         delta_value = incomingValue - bis_value
         player.normal_delta_matrix[itemName] = delta_value
     
-    if source == HEROIC_RAID_SOURCE or source == DUNGEON_SOURCE:
+    if source == HEROIC_RAID_SOURCE or source == DUNGEON_SOURCE or source == CRAFTED_SOURCE:
         bis_item = player.heroic_bis.get_bis(slot)
         bis_value = player.sims[bis_item]
         delta_value = incomingValue - bis_value
         player.heroic_delta_matrix[itemName] = delta_value
         
-    if source == MYTHIC_RAID_SOURCE or source == DUNGEON_SOURCE:
+    if source == MYTHIC_RAID_SOURCE or source == DUNGEON_SOURCE or source == CRAFTED_SOURCE:
         bis_item = player.mythic_bis.get_bis(slot)
         bis_value = player.sims[bis_item]
         delta_value = incomingValue - bis_value
@@ -510,7 +388,7 @@ def build_delta_matrices():
 
 def check_and_add_bis(player: Player, itemName: str, incomingValue: float, slot: str, source: str):
     #If item is from normal or dungeon, then check and add bis
-    if source == NORMAL_RAID_SOURCE or source == DUNGEON_SOURCE:
+    if source == NORMAL_RAID_SOURCE or source == DUNGEON_SOURCE or source == CRAFTED_SOURCE:
         if player.normal_bis.get_bis(slot) is None: 
             player.normal_bis.set_bis(slot, itemName)
         else:   
@@ -519,7 +397,7 @@ def check_and_add_bis(player: Player, itemName: str, incomingValue: float, slot:
                 player.normal_bis.set_bis(slot, itemName)
 
     #If item is from normal or dungeon, then check and add bis
-    if source == HEROIC_RAID_SOURCE or source == DUNGEON_SOURCE:
+    if source == HEROIC_RAID_SOURCE or source == DUNGEON_SOURCE or source == CRAFTED_SOURCE:
         if player.heroic_bis.get_bis(slot) is None: 
             player.heroic_bis.set_bis(slot, itemName)
         else:    
@@ -528,7 +406,7 @@ def check_and_add_bis(player: Player, itemName: str, incomingValue: float, slot:
                 player.heroic_bis.set_bis(slot, itemName)
     
     #If item is from normal or dungeon, then check and add bis
-    if source == MYTHIC_RAID_SOURCE or source == DUNGEON_SOURCE:
+    if source == MYTHIC_RAID_SOURCE or source == DUNGEON_SOURCE or source == CRAFTED_SOURCE:
         if player.mythic_bis.get_bis(slot) is None: 
             player.mythic_bis.set_bis(slot, itemName)
         else:    
@@ -543,7 +421,7 @@ def find_next_best(player: Player, item: str, source: str):
     slot = items[item]
     for key in player.sims:
         thisSource = itemSources[key]
-        if thisSource != DUNGEON_SOURCE and thisSource != source:
+        if thisSource != DUNGEON_SOURCE and thisSource != CRAFTED_SOURCE and thisSource != DELVES_SOURCE and thisSource != source:
             continue
         if items[key] != slot or key == item:
             continue
@@ -552,7 +430,8 @@ def find_next_best(player: Player, item: str, source: str):
             continue
         if player.sims[key] > next_best:
             next_best = player.sims[key]
-    return next_best
+    return next_best if next_best is not None else 0
+
 
 def populate_bis_lists():
     for player in players:
@@ -569,70 +448,101 @@ def add_if_bis(item: str, source: str, choices, reason: str):
                 
                 if source == NORMAL_RAID_SOURCE:
                     if player.normal_delta_matrix[item] == 0:
-                        choices.append(ItemCandidate(
-                            player,
-                            player.sims[item],
-                            player.normal_delta_matrix[item],
-                            find_next_best(player, item, source),
-                            reason))
+                        item_val = player.sims[item]
+                        next_best = find_next_best(player, item, source)
+                        next_best_delta = item_val - next_best
+                        if item_val > next_best:
+                            choices.append(ItemCandidate(
+                                player,
+                                item_val,
+                                next_best_delta,
+                                next_best,
+                                reason))
                         
                 if source == HEROIC_RAID_SOURCE:
                     if player.heroic_delta_matrix[item] == 0:
-                        choices.append(ItemCandidate(
-                            player,
-                            player.sims[item],
-                            player.heroic_delta_matrix[item],
-                            find_next_best(player, item, source),
-                            reason))
+                        item_val = player.sims[item]
+                        next_best = find_next_best(player, item, source)
+                        next_best_delta = item_val - next_best
+                        if item_val > next_best:
+                            choices.append(ItemCandidate(
+                                player,
+                                item_val,
+                                next_best_delta,
+                                next_best,
+                                reason))
                         
                 if source == MYTHIC_RAID_SOURCE:
                     if player.mythic_delta_matrix[item] == 0:
-                        choices.append(ItemCandidate(
-                            player,
-                            player.sims[item],
-                            player.mythic_delta_matrix[item],
-                            find_next_best(player, item, source),
-                            reason))
+                        item_val = player.sims[item]
+                        next_best = find_next_best(player, item, source)
+                        next_best_delta = item_val - next_best
+                        if item_val > next_best:
+                            choices.append(ItemCandidate(
+                                player,
+                                item_val,
+                                next_best_delta,
+                                next_best,
+                                reason))
 
 def add_if_upgrade(item:str, source:str, choices, reason: str):
     for player in players:
-            if item in player.sims and player.sims[item] > 0:
-                
-                if source == NORMAL_RAID_SOURCE:
-                    choices.append(ItemCandidate(
-                        player,
-                        player.sims[item],
-                        player.normal_delta_matrix[item],
-                        find_next_best(player, item, source),
-                        reason))
-                        
-                if source == HEROIC_RAID_SOURCE:
-                    choices.append(ItemCandidate(
-                        player,
-                        player.sims[item],
-                        player.heroic_delta_matrix[item],
-                        find_next_best(player, item, source),
-                        reason))
-                        
-                if source == MYTHIC_RAID_SOURCE:
-                    choices.append(ItemCandidate(
-                        player,
-                        player.sims[item],
-                        player.mythic_delta_matrix[item],
-                        find_next_best(player, item, source),
-                        reason))
+        if item in player.sims and player.sims[item] > 0:
+            if source == NORMAL_RAID_SOURCE:
+                item_val = player.sims[item]
+                next_best = find_next_best(player, item, source)
+                next_best_delta = item_val - next_best
+                choices.append(ItemCandidate(
+                    player,
+                    item_val,
+                    next_best_delta,
+                    next_best,
+                    reason))
+                    
+            if source == HEROIC_RAID_SOURCE:
+                item_val = player.sims[item]
+                next_best = find_next_best(player, item, source)
+                next_best_delta = item_val - next_best
+                choices.append(ItemCandidate(
+                    player,
+                    item_val,
+                    next_best_delta,
+                    next_best,
+                    reason))
+                    
+            if source == MYTHIC_RAID_SOURCE:
+                item_val = player.sims[item]
+                next_best = find_next_best(player, item, source)
+                next_best_delta = item_val - next_best
+                choices.append(ItemCandidate(
+                    player,
+                    item_val,
+                    next_best_delta,
+                    next_best,
+                    reason))
+
+def remove_second_occurrences(choices):
+    seen = set()
+    filtered_choices = []
+
+    for choice in choices:
+        if choice.player.name not in seen:
+            seen.add(choice.player.name)
+            filtered_choices.append(choice)
+
+    return filtered_choices
 
 def create_choices():
     no_choice_player = Player("No choice", None, None)
     for item in sorted(items.keys()):
         source = itemSources[item]
-        if source == DUNGEON_SOURCE:
+        if source == DUNGEON_SOURCE or source == CRAFTED_SOURCE or source == DELVES_SOURCE:
             continue
         choices = []
         add_if_bis(item, source, choices, BIS_REASON)
         
         if len(choices) > 4:
-            choices.sort(key=lambda x: x.next_best_val, reverse=True)
+            choices.sort(key=lambda x: x.item_delta, reverse=True)
             choices = choices[:5] 
             item_Choices[item] = choices
             continue
@@ -640,10 +550,11 @@ def create_choices():
         non_bis_choices = []
         add_if_upgrade(item, source, non_bis_choices, UPGRADE_PCT_REASON)
         if len(non_bis_choices) > 0:
-            non_bis_choices.sort(key=lambda x: (x.item_val, x.next_best_val,), reverse=True)
+            non_bis_choices.sort(key=lambda x: (x.item_val, x.item_delta), reverse=True)
             
-        choices.sort(key=lambda x: x.next_best_val, reverse=True)
+        choices.sort(key=lambda x: x.item_delta, reverse=True)
         choices.extend(non_bis_choices)
+        choices = remove_second_occurrences(choices)
         choices = choices[:5]
         item_Choices[item] = choices
         
@@ -654,8 +565,51 @@ def create_choices():
                         0,
                         0,
                         "No candidate"))
-        
 
+def nested_dict():
+    return defaultdict(nested_dict)
+
+def does_source_boss_match_exist(source, boss):
+    for itemSource in itemSources.keys():
+        if itemSources[itemSource] == source:
+            for itemBoss in itemBosses.keys():
+                if itemBosses[itemBoss] == boss:
+                    if itemSource == itemBoss:
+                        return True
+    return False
+
+def create_ev_dictionary():
+    ev_dict = nested_dict()
+    
+    for source in sourcesLookup.values():
+        for boss in bossesList:
+            if does_source_boss_match_exist(source, boss):
+                for player in players:
+                    total_count = 0
+                    non_negative_sum = 0
+                    for item in player.sims.keys():
+                        if itemSources[item] == source and itemBosses[item] == boss:
+                            total_count += 1
+                            if player.sims[item] > 0:
+                                non_negative_sum += player.sims[item]
+                    ev_dict[source][boss][player.name] = round(non_negative_sum / total_count if total_count > 0 else 0, 3)
+    return add_average_to_ev_dictionary(ev_dict)
+
+def add_average_to_ev_dictionary(ev_dict: defaultdict):
+    for source in ev_dict.keys():
+        for boss in ev_dict[source].keys():
+            total_count = 0
+            non_negative_sum = 0
+            for player_name, value in ev_dict[source][boss].items():
+                total_count += 1
+                if value > 0:
+                    non_negative_sum += value
+            if total_count > 0:
+                average_value = non_negative_sum / total_count if total_count > 0 else 0
+                ev_dict[source][boss]["Average"] = round(average_value, 3)
+            else: 
+                ev_dict[source][boss]["Average"] = 0
+    return ev_dict
 
 def main():
     #Ugly hack for stupid operating systems:
@@ -710,6 +664,7 @@ def main():
     populate_bis_lists()
     build_delta_matrices()
     create_choices()
+    ev_dictionary = create_ev_dictionary()
     
     #Sort players alphabetically, and by role.  Tanks first, then DPS, then
     #healers.
@@ -741,119 +696,136 @@ def main():
                   
     normalRaidOutput = open(normalRaidFilename,"w")
     
+    
+    evFileName = "ev_sheet-"+ \
+                  datetime.datetime.fromtimestamp( \
+                  time.time()).strftime("%d-%m-%Y") + ".csv"
+    
+    evOutput = open(evFileName,"w")
+    
     #Print headers for item, slot, and sources columns
     output.write("Item Name" + "," + "Slot" + "," + "Source" + "," + "Boss")
+    evOutput.write("Source" + "," + "Boss" + "," + "Player" + "," + "EV")
     
     choicesFileHeaders = [
-        "Boss",
-        "Item Name",
-        "Choice 1",
-        "Choice 1 % Upgrade",
-        "Next Best Alternative",
-        "Choice Reason",
-        "Choice 2",
-        "Choice 2 % Upgrade",
-        "Next Best Alternative",
-        "Choice Reason",
-        "Choice 3",
-        "Choice 3 % Upgrade",
-        "Next Best Alternative",
-        "Choice Reason",        
-        "Choice 4",
-        "Choice 4 % Upgrade",
-        "Next Best Alternative",
-        "Choice Reason",
-        "Choice 5",
-        "Choice 5 % Upgrade",
-        "Next Best Alternative",
-        "Choice Reason",
+        "Boss", "Item Name",
+        "Choice 1", "Choice 1 Reason", "Choice 1 % Upgrade", "Next Best Alternative",
+        "Choice 2", "Choice 2 Reason", "Choice 2 % Upgrade", "Next Best Alternative",
+        "Choice 3", "Choice 3 Reason", "Choice 3 % Upgrade", "Next Best Alternative",
+        "Choice 4", "Choice 4 Reason", "Choice 4 % Upgrade", "Next Best Alternative",
+        "Choice 5", "Choice 5 Reason", "Choice 5 % Upgrade", "Next Best Alternative",
     ]
-    for header in choicesFileHeaders:
-        mythicRaidOutput.write(header)
-        mythicRaidOutput.write(",")
-        heroicRaidOutput.write(header)
-        heroicRaidOutput.write(",")
-        normalRaidOutput.write(header)
-        normalRaidOutput.write(",")
+    mythicRaidOutput.write(",".join(choicesFileHeaders) + "\n")
+    heroicRaidOutput.write(",".join(choicesFileHeaders) + "\n")
+    normalRaidOutput.write(",".join(choicesFileHeaders) + "\n")
 
-    #First, one row with the player names and an initial blank entry.
-    #If someone only submitted sims for one spec, no need to specify specs
-    #on this line.
-    #If they submitted sims for several specs (e.g., both Arcane and Frost
-    #Mage), then we have separate columns for the specs and we should name them.
-    for p in players:
-        if p.multispec:
-            output.write(","+p.name+" ("+p.spec+")")
-        else:
-            output.write(","+p.name)
+    #Instead of opening files, collect rows:
+    output_rows = []
+    mythicRaid_rows = []
+    heroicRaid_rows = []
+    normalRaid_rows = []
+    ev_rows = []
 
-    output.write("\n")
-    mythicRaidOutput.write("\n")
-    heroicRaidOutput.write("\n")
-    normalRaidOutput.write("\n")
+    #Prepare headers as before, but as lists:
+    output_rows.append(["Item Name", "Slot", "Source", "Boss"] + [p.name + (f" ({p.spec})" if p.multispec else "") for p in players])
+    choicesFileHeaders = [
+        "Boss", "Item Name",
+        "Choice 1", "Choice 1 Reason", "Choice 1 % Upgrade", "Next Best Alternative",
+        "Choice 2", "Choice 2 Reason", "Choice 2 % Upgrade", "Next Best Alternative",
+        "Choice 3", "Choice 3 Reason", "Choice 3 % Upgrade", "Next Best Alternative",
+        "Choice 4", "Choice 4 Reason", "Choice 4 % Upgrade", "Next Best Alternative",
+        "Choice 5", "Choice 5 Reason", "Choice 5 % Upgrade", "Next Best Alternative",
+    ]
+    mythicRaid_rows.append(choicesFileHeaders)
+    heroicRaid_rows.append(choicesFileHeaders)
+    normalRaid_rows.append(choicesFileHeaders)
 
-    #Then, for each item, a row with that item's name and the appropriate sim.
 
     for key in sorted(items.keys()):
-        # Prepare the key field: if it contains a comma, enclose it in double quotes.
-        escaped_key = escape_csv_field(key)
-        escaped_item = escape_csv_field(items[key])
-        escaped_itemSource = escape_csv_field(itemSources[key])
-        escaped_itemBosses = escape_csv_field(itemBosses[key])
-        #Write the item, slot, and source into their columns, deliminated by a comma
-        output.write(escaped_key + "," + escaped_item + "," + escaped_itemSource + "," + escaped_itemBosses)
-        
+        row = [
+            key,
+            items[key],
+            itemSources.get(key, ""),
+            itemBosses.get(key, "")
+        ]
         for p in players:
-            if key in p.sims:
-                output.write("," + str(p.sims[key]))
-            else:
-                output.write(",")
-        output.write("\n")
-    
-    for key in sorted(item_Choices.keys()):
-        if itemSources[key] == MYTHIC_RAID_SOURCE:
-            escaped_key = escape_csv_field(key)
-            escaped_itemBosses = escape_csv_field(itemBosses[key])
-            mythicRaidOutput.write(escaped_itemBosses + "," + escaped_key + ",")
-            
-            for choice in item_Choices[key]:
-                mythicRaidOutput.write(f"{choice.player.name}, {choice.item_val}, {choice.next_best_val}, {choice.candidate_reason},")
-            mythicRaidOutput.write("\n")
-        
-        if itemSources[key] == HEROIC_RAID_SOURCE:
-            escaped_key = escape_csv_field(key)
-            escaped_itemBosses = escape_csv_field(itemBosses[key])
-            heroicRaidOutput.write(escaped_itemBosses + "," + escaped_key + ",")
-            
-            for choice in item_Choices[key]:
-                heroicRaidOutput.write(f"{choice.player.name}, {choice.item_val}, {choice.next_best_val}, {choice.candidate_reason},")
-            heroicRaidOutput.write("\n")
+            row.append(str(p.sims.get(key, "")))
+        output_rows.append(row)
 
-        if itemSources[key] == NORMAL_RAID_SOURCE:
-            escaped_key = escape_csv_field(key)
-            escaped_itemBosses = escape_csv_field(itemBosses[key])
-            normalRaidOutput.write(escaped_itemBosses + "," + escaped_key + ",")
-            
-            for choice in item_Choices[key]:
-                normalRaidOutput.write(f"{choice.player.name}, {choice.item_val}, {choice.next_best_val}, {choice.candidate_reason},")
-            normalRaidOutput.write("\n")
 
-    print(f"Output written to {outfilename}, {mythicRaidFilename}, {heroicRaidFilename}, and {normalRaidFilename}.")
+    for item in sorted(items.keys()):
+        boss = itemBosses.get(item, "")
+        item_source = itemSources.get(item, "")
+        choices = item_Choices.get(item, [])
+        # Build the row for each difficulty
+        if item_source == MYTHIC_RAID_SOURCE:
+            row = [boss, item]
+            for c in choices:
+                row.extend([
+                    getattr(c.player, "name", ""),
+                    c.candidate_reason,
+                    c.item_val,
+                    c.next_best_val
+                ])
+            # Pad to 5 choices if needed
+            while len(row) < 22:
+                row.extend(["", "", "", ""])
+            mythicRaid_rows.append(row)
+        elif item_source == HEROIC_RAID_SOURCE:
+            row = [boss, item]
+            for c in choices:
+                row.extend([
+                    getattr(c.player, "name", ""),
+                    c.candidate_reason,
+                    c.item_val,
+                    c.next_best_val
+                ])
+            while len(row) < 22:
+                row.extend(["", "", "", ""])
+            heroicRaid_rows.append(row)
+        elif item_source == NORMAL_RAID_SOURCE:
+            row = [boss, item]
+            for c in choices:
+                row.extend([
+                    getattr(c.player, "name", ""),
+                    c.candidate_reason,
+                    c.item_val,
+                    c.next_best_val
+                ])
+            while len(row) < 22:
+                row.extend(["", "", "", ""])
+            normalRaid_rows.append(row)
+
+    # EV Sheet
+    for source in ev_dictionary:
+        for boss in ev_dictionary[source]:
+            for player in ev_dictionary[source][boss]:
+                ev_rows.append([source, boss, player, ev_dictionary[source][boss][player]])
+
+    #Write to Google Sheets
+    service = get_sheets_service()
+    SPREADSHEET_ID = '1h7UeLR_XygsUpc1-bFN9wCOFAa5-on43JSZ47XJhO4o'  # Replace with your Google Sheet ID
+
+    # Clear each sheet before writing
+    clear_sheet(service, SPREADSHEET_ID, 'amilooted.py')
+    clear_sheet(service, SPREADSHEET_ID, 'Mythic Raid Choices')
+    clear_sheet(service, SPREADSHEET_ID, 'Heroic Raid Choices')
+    clear_sheet(service, SPREADSHEET_ID, 'Normal Raid Choices')
+    clear_sheet(service, SPREADSHEET_ID, 'Expected Values')
+
+    write_to_sheet(service, SPREADSHEET_ID, 'amilooted.py', output_rows)
+    write_to_sheet(service, SPREADSHEET_ID, 'Mythic Raid Choices', mythicRaid_rows)
+    write_to_sheet(service, SPREADSHEET_ID, 'Heroic Raid Choices', heroicRaid_rows)
+    write_to_sheet(service, SPREADSHEET_ID, 'Normal Raid Choices', normalRaid_rows)
+    write_to_sheet(service, SPREADSHEET_ID, 'Expected Values', ev_rows)
+
+    print(f"Output written to Google Sheets workbook: {SPREADSHEET_ID}")
     print("Press Enter to exit.")
     input()
 
-
-
-
-
-
-
-
-
-
-
 if __name__ == "__main__":
     main()
+
 
 
 

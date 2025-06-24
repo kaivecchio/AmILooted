@@ -52,6 +52,7 @@ droptimizers-*.csv
 normal-raid-choices-*.csv
 heroic-raid-choices-*.csv
 mythic-raid-choices-*.csv
+ev_sheet-*.csv
 
 
 # ----------------------------------
@@ -81,3 +82,6 @@ DocumentLayout.json
 # ----------------------------------
 *.testlog
 testlog.manifest
+
+# Ignore Google Cloud credentials
+credentials.json
