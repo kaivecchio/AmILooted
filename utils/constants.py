@@ -99,7 +99,7 @@ tiernames = ["Cauldron Champion's",        #Death Knight LOU
             "of Madness",                  #Warlock MO 
             "to Madness",                  #Warlock MO Headpiece
             "Living Weapon's"              #Warrior MO
-             ]       
+            ]       
 
 
 #Try to replace tier names with, e.g., "Tier Helm 441", without knowing
