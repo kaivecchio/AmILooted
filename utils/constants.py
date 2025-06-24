@@ -43,7 +43,15 @@ bossesList = [
     "Sprocketmonger Lockenstock",
     "The One-Armed Bandit",
     "Mug'Zee, Heads of Security",
-    "Chrome King Gallywix"
+    "Chrome King Gallywix",
+    "Plexus Sentinel",
+    "Loom'ithar",
+    "Soulbinder Naazindhri",
+    "Forgeweaver Araz",
+    "The Soul Hunters",
+    "Fractillus",
+    "Nexus-King Salhadaar",
+    "Dimensius, the All-Devouring"
 ]
 
 slotdict = {
@@ -64,19 +72,34 @@ qeWeaponSlots = ["One-Hand", "Ranged", "Two-Hand"]
 #Substrings that reliably indicate that this is a tier piece.
 #This should be the only thing that needs to be updated for new patches,
 #unless raidbots changes something about their developer tools.
-tiernames = ["Cauldron Champion's",         #Death Knight
-             "Fel-Dealer's",                #Demon Hunter
-             "of Reclaiming Blight",        #Druid
-             "Opulent Treasurescale's",     #Evoker
-             "Tireless Collector's",        #Hunter
-             "Aspectral Emissary's",        #Mage
-             "Ageless Serpent's",           #Monk
-             "Aureate Sentry's",            #Paladin
-             "Confessor's Unshakable",      #Priest
-             "Spectral Gambler's",          #Rogue
-             "Gale Sovereign's",            #Shaman
-             "Spliced Fiendtrader's",       #Warlock
-             "Enforcer's Backalley"]        #Warrior
+tiernames = ["Cauldron Champion's",        #Death Knight LOU
+            "Fel-Dealer's",                #Demon Hunter LOU
+            "of Reclaiming Blight",        #Druid LOU
+            "Opulent Treasurescale's",     #Evoker LOU
+            "Tireless Collector's",        #Hunter LOU
+            "Aspectral Emissary's",        #Mage LOU
+            "Ageless Serpent's",           #Monk LOU
+            "Aureate Sentry's",            #Paladin LOU
+            "Confessor's Unshakable",      #Priest LOU
+            "Spectral Gambler's",          #Rogue LOU
+            "Gale Sovereign's",            #Shaman LOU
+            "Spliced Fiendtrader's",       #Warlock LOU
+            "Enforcer's Backalley",        #Warrior LOU
+            "Hollow Sentinel's",           #Death Knight MO
+            "Charhound's Vicious",         #Demon Hunter MO
+            "of the Mother Eagle",         #Druid MO
+            "Spellweaver's Immaculate",    #Evoker MO
+            "Midnight Herald's",           #Hunter MO
+            "Augur's Ephemeral",           #Mage MO
+            "of Fallen Storms",            #Monk MO
+            "of the Lucent Battalion",     #Paladin MO
+            "Dying Star's",                #Priest MO
+            "of the Sudden Eclipse",       #Rogue MO
+            "of Channeled Fury",           #Shaman MO
+            "of Madness",                  #Warlock MO 
+            "to Madness",                  #Warlock MO Headpiece
+            "Living Weapon's"              #Warrior MO
+             ]       
 
 
 #Try to replace tier names with, e.g., "Tier Helm 441", without knowing
