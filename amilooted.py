@@ -842,7 +842,7 @@ def main():
                     row = [b, item]
                     for c in choices:
                         row.extend([
-                            getattr(c.player, "name", ""),
+                            getattr(c.player, "name", "") + (f" ({c.player.spec})" if c.player.multispec else ""),
                             c.candidate_reason,
                             c.item_val,
                             c.next_best_val
@@ -858,7 +858,7 @@ def main():
                     row = [b, item]
                     for c in choices:
                         row.extend([
-                            getattr(c.player, "name", ""),
+                            getattr(c.player, "name", "") + (f" ({c.player.spec})" if c.player.multispec else ""),
                             c.candidate_reason,
                             c.item_val,
                             c.next_best_val
@@ -873,7 +873,7 @@ def main():
                     row = [b, item]
                     for c in choices:
                         row.extend([
-                            getattr(c.player, "name", ""),
+                            getattr(c.player, "name", "") + (f" ({c.player.spec})" if c.player.multispec else ""),
                             c.candidate_reason,
                             c.item_val,
                             c.next_best_val
@@ -888,7 +888,7 @@ def main():
                 row = [boss, item]
                 for c in choices:
                     row.extend([
-                        getattr(c.player, "name", ""),
+                        getattr(c.player, "name", "") + (f" ({c.player.spec})" if c.player.multispec else ""),
                         c.candidate_reason,
                         c.item_val,
                         c.next_best_val
@@ -901,7 +901,7 @@ def main():
                 row = [boss, item]
                 for c in choices:
                     row.extend([
-                        getattr(c.player, "name", ""),
+                        getattr(c.player, "name", "") + (f" ({c.player.spec})" if c.player.multispec else ""),
                         c.candidate_reason,
                         c.item_val,
                         c.next_best_val
@@ -913,7 +913,7 @@ def main():
                 row = [boss, item]
                 for c in choices:
                     row.extend([
-                        getattr(c.player, "name", ""),
+                        getattr(c.player, "name", "") + (f" ({c.player.spec})" if c.player.multispec else ""),
                         c.candidate_reason,
                         c.item_val,
                         c.next_best_val
