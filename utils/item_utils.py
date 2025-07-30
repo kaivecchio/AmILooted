@@ -93,3 +93,15 @@ def can_be_float(value):
         return True
     except ValueError:
         return False
+    
+def get_item_source(item):
+    source = itemSources.get(item, "")
+    if isinstance(source, set):
+        return ", ".join(source)
+    return source
+
+def get_item_boss(item):
+    boss = itemBosses.get(item, "")
+    if isinstance(boss, set):
+        return ", ".join(boss)
+    return boss

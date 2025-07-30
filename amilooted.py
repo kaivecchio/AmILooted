@@ -73,10 +73,28 @@ def find_item_source(inputString):
    
 
 def add_to_item_sources(itemname, itemSource):
-    if itemname in itemSources:
+    # For tier items, we want to store multiple sources
+    if tiercheck(itemname) or "Tier " in itemname:
+        if itemname not in itemSources:
+            itemSources[itemname] = set()
+        itemSources[itemname].add(itemSource)
+    else:
+        # For non-tier items, keep the existing behavior
+        if itemname in itemSources:
             return
-    itemSources[itemname] = itemSource
+        itemSources[itemname] = itemSource
     
+def add_to_item_bosses(itemName, bossName):
+    # For tier items, we want to store multiple bosses
+    if tiercheck(itemName) or "Tier " in itemName:
+        if itemName not in itemBosses:
+            itemBosses[itemName] = set()
+        itemBosses[itemName].add(bossName)
+    else:
+        # For non-tier items, keep the existing behavior
+        if itemName in itemBosses:
+            return
+        itemBosses[itemName] = bossName
 
 def find_item_boss(inputString):
     for boss in bossesList:
@@ -570,12 +588,17 @@ def nested_dict():
     return defaultdict(nested_dict)
 
 def does_source_boss_match_exist(source, boss):
-    for itemSource in itemSources.keys():
-        if itemSources[itemSource] == source:
-            for itemBoss in itemBosses.keys():
-                if itemBosses[itemBoss] == boss:
-                    if itemSource == itemBoss:
-                        return True
+    for item, item_source in itemSources.items():
+        # Handle both single sources and sets of sources
+        sources_to_check = [item_source] if not isinstance(item_source, set) else item_source
+        
+        if source in sources_to_check:
+            item_boss = itemBosses.get(item)
+            # Handle both single bosses and sets of bosses
+            bosses_to_check = [item_boss] if not isinstance(item_boss, set) else item_boss
+            
+            if boss in bosses_to_check:
+                return True
     return False
 
 def create_ev_dictionary():
@@ -588,7 +611,14 @@ def create_ev_dictionary():
                     total_count = 0
                     non_negative_sum = 0
                     for item in player.sims.keys():
-                        if itemSources[item] == source and itemBosses[item] == boss:
+                        item_source = itemSources.get(item)
+                        item_boss = itemBosses.get(item)
+                        
+                        # Check if this item matches the current source and boss
+                        source_match = source == item_source if not isinstance(item_source, set) else source in item_source
+                        boss_match = boss == item_boss if not isinstance(item_boss, set) else boss in item_boss
+                        
+                        if source_match and boss_match:
                             total_count += 1
                             if player.sims[item] > 0:
                                 non_negative_sum += player.sims[item]
@@ -741,60 +771,156 @@ def main():
     normalRaid_rows.append(choicesFileHeaders)
 
 
+    # In the part where you build rows for output
     for key in sorted(items.keys()):
-        row = [
-            key,
-            items[key],
-            itemSources.get(key, ""),
-            itemBosses.get(key, "")
-        ]
-        for p in players:
-            row.append(str(p.sims.get(key, "")))
-        output_rows.append(row)
+        # Check if this is a tier item with multiple sources/bosses
+        item_source = itemSources.get(key, "")
+        item_boss = itemBosses.get(key, "")
+        
+        # If tier item with multiple sources/bosses, create multiple rows
+        if isinstance(item_source, set) and isinstance(item_boss, set):
+            # For each source/boss combination, create a row
+            for source in item_source:
+                for boss in item_boss:
+                    row = [
+                        key,
+                        items[key],
+                        source,
+                        boss
+                    ]
+                    for p in players:
+                        row.append(str(p.sims.get(key, "")))
+                    output_rows.append(row)
+        # If tier item with only multiple sources, create rows for each source
+        elif isinstance(item_source, set):
+            for source in item_source:
+                row = [
+                    key,
+                    items[key],
+                    source,
+                    get_item_boss(key)
+                ]
+                for p in players:
+                    row.append(str(p.sims.get(key, "")))
+                output_rows.append(row)
+        # If tier item with only multiple bosses, create rows for each boss
+        elif isinstance(item_boss, set):
+            for boss in item_boss:
+                row = [
+                    key,
+                    items[key],
+                    get_item_source(key),
+                    boss
+                ]
+                for p in players:
+                    row.append(str(p.sims.get(key, "")))
+                output_rows.append(row)
+        # Otherwise, just create a single row
+        else:
+            row = [
+                key,
+                items[key],
+                get_item_source(key),
+                get_item_boss(key)
+            ]
+            for p in players:
+                row.append(str(p.sims.get(key, "")))
+            output_rows.append(row)
 
 
     for item in sorted(items.keys()):
         boss = itemBosses.get(item, "")
         item_source = itemSources.get(item, "")
         choices = item_Choices.get(item, [])
-        # Build the row for each difficulty
-        if item_source == MYTHIC_RAID_SOURCE:
-            row = [boss, item]
-            for c in choices:
-                row.extend([
-                    getattr(c.player, "name", ""),
-                    c.candidate_reason,
-                    c.item_val,
-                    c.next_best_val
-                ])
-            # Pad to 5 choices if needed
-            while len(row) < 22:
-                row.extend(["", "", "", ""])
-            mythicRaid_rows.append(row)
-        elif item_source == HEROIC_RAID_SOURCE:
-            row = [boss, item]
-            for c in choices:
-                row.extend([
-                    getattr(c.player, "name", ""),
-                    c.candidate_reason,
-                    c.item_val,
-                    c.next_best_val
-                ])
-            while len(row) < 22:
-                row.extend(["", "", "", ""])
-            heroicRaid_rows.append(row)
-        elif item_source == NORMAL_RAID_SOURCE:
-            row = [boss, item]
-            for c in choices:
-                row.extend([
-                    getattr(c.player, "name", ""),
-                    c.candidate_reason,
-                    c.item_val,
-                    c.next_best_val
-                ])
-            while len(row) < 22:
-                row.extend(["", "", "", ""])
-            normalRaid_rows.append(row)
+        
+        # For items with multiple sources, we need to check each source
+        if isinstance(item_source, set):
+            # For each source, create appropriate rows
+            if MYTHIC_RAID_SOURCE in item_source:
+                bosses = [boss] if not isinstance(boss, set) else boss
+                for b in bosses:
+                    row = [b, item]
+                    for c in choices:
+                        row.extend([
+                            getattr(c.player, "name", ""),
+                            c.candidate_reason,
+                            c.item_val,
+                            c.next_best_val
+                        ])
+                    # Pad to 5 choices if needed
+                    while len(row) < 22:
+                        row.extend(["", "", "", ""])
+                    mythicRaid_rows.append(row)
+                    
+            if HEROIC_RAID_SOURCE in item_source:
+                bosses = [boss] if not isinstance(boss, set) else boss
+                for b in bosses:
+                    row = [b, item]
+                    for c in choices:
+                        row.extend([
+                            getattr(c.player, "name", ""),
+                            c.candidate_reason,
+                            c.item_val,
+                            c.next_best_val
+                        ])
+                    while len(row) < 22:
+                        row.extend(["", "", "", ""])
+                    heroicRaid_rows.append(row)
+                    
+            if NORMAL_RAID_SOURCE in item_source:
+                bosses = [boss] if not isinstance(boss, set) else boss
+                for b in bosses:
+                    row = [b, item]
+                    for c in choices:
+                        row.extend([
+                            getattr(c.player, "name", ""),
+                            c.candidate_reason,
+                            c.item_val,
+                            c.next_best_val
+                        ])
+                    while len(row) < 22:
+                        row.extend(["", "", "", ""])
+                    normalRaid_rows.append(row)
+        # For regular items with a single source
+        else:
+            # Build the row for each difficulty
+            if item_source == MYTHIC_RAID_SOURCE:
+                row = [boss, item]
+                for c in choices:
+                    row.extend([
+                        getattr(c.player, "name", ""),
+                        c.candidate_reason,
+                        c.item_val,
+                        c.next_best_val
+                    ])
+                # Pad to 5 choices if needed
+                while len(row) < 22:
+                    row.extend(["", "", "", ""])
+                mythicRaid_rows.append(row)
+            elif item_source == HEROIC_RAID_SOURCE:
+                row = [boss, item]
+                for c in choices:
+                    row.extend([
+                        getattr(c.player, "name", ""),
+                        c.candidate_reason,
+                        c.item_val,
+                        c.next_best_val
+                    ])
+                while len(row) < 22:
+                    row.extend(["", "", "", ""])
+                heroicRaid_rows.append(row)
+            elif item_source == NORMAL_RAID_SOURCE:
+                row = [boss, item]
+                for c in choices:
+                    row.extend([
+                        getattr(c.player, "name", ""),
+                        c.candidate_reason,
+                        c.item_val,
+                        c.next_best_val
+                    ])
+                while len(row) < 22:
+                    row.extend(["", "", "", ""])
+                normalRaid_rows.append(row)
 
     # EV Sheet
     for source in ev_dictionary:
@@ -804,7 +930,7 @@ def main():
 
     #Write to Google Sheets
     service = get_sheets_service()
-    SPREADSHEET_ID = '1h7UeLR_XygsUpc1-bFN9wCOFAa5-on43JSZ47XJhO4o'  # Replace with your Google Sheet ID
+    SPREADSHEET_ID = '1Or4KnQfl-lk-BsUG6URRDfkPKi5f8LgpDtvyxeumY6Y' # Old sheet id:'1h7UeLR_XygsUpc1-bFN9wCOFAa5-on43JSZ47XJhO4o'  # Replace with your Google Sheet ID
 
     # Clear each sheet before writing
     clear_sheet(service, SPREADSHEET_ID, 'amilooted.py')
