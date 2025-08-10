@@ -544,8 +544,9 @@ def remove_second_occurrences(choices):
     filtered_choices = []
 
     for choice in choices:
-        if choice.player.name not in seen:
-            seen.add(choice.player.name)
+        key = (choice.player.name, choice.player.spec)
+        if key not in seen:
+            seen.add(key)
             filtered_choices.append(choice)
 
     return filtered_choices
