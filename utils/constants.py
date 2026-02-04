@@ -116,7 +116,6 @@ def tierfilter_qe(itemname):
            "cowl" in itemname.lower() or \
            "cover" in itemname.lower() or \
            "mask" in itemname.lower() or \
-           "gaze" in itemname.lower() or \
            "scowl" in itemname.lower() or \
            "casque" in itemname.lower() or \
            "coif" in itemname.lower() or \
